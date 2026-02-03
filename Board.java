@@ -1,5 +1,7 @@
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
 
 public class Board {
     private int boardWidth;
@@ -29,17 +31,46 @@ public class Board {
     }
 
     private boolean noteInBounds(int x, int y) {
-        // can't have notes on the very edge? 
+        // can't have notes on the very edge?
         return x + noteWidth < this.boardWidth && y + noteHeight < this.boardHeight && x > 0 && y > 0;
 
     }
 
-    private boolean pinInBounds(int x, int y) {
-        // can't have notes on the very edge? 
+    private boolean pointInBounds(int x, int y) {
+        // can't have notes on the very edge?
         return x < this.boardWidth && y < this.boardHeight && x > 0 && y > 0;
     }
 
- 
+    private String buildGetResponse(List<Note> results) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("OK ").append(results.size());
+
+        for (Note note : results) {
+            sb.append("\nNOTE ").append(note.getX()).append(" ").append(note.getY()).append(" ").append(note.getColor())
+                    .append(" ").append(note.getMessage()).append(" PINNED=").append(note.getPinnedStatus());
+        }
+
+        return sb.toString();
+    }
+
+    private String buildGetPinsResponse(Set<Pin> allPins) {
+
+        // OK <count>
+        // PIN x y
+        // PIN x y
+        // …
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("OK ").append(allPins.size());
+
+        for (Pin pin : allPins) {
+            sb.append("\nPIN ").append(pin.getX()).append(" ").append(pin.getY());
+        }
+
+        return sb.toString();
+
+    }
+
     // Methoddssss
 
     public synchronized String addNote(Note note) {
@@ -50,16 +81,16 @@ public class Board {
         } else if (!validColors.contains(note.color)) {
             // ERROR COLOR_NOT_VALID
             return "ERROR COLOR_NOT_VALID";
-        }  else {
+        } else {
             this.notes.add(note);
             // OK NOTE_POSTED
             return "OK NOTE_POSTED";
         }
-        
+
     }
 
-    public synchronized String addPin(int pinX, int pinY){
-        if (!pinInBounds(pinX, pinY)) {
+    public synchronized String addPin(int pinX, int pinY) {
+        if (!pointInBounds(pinX, pinY)) {
             return "ERROR OUT_OF_BOUNDS";
         } else {
             for (Note note : this.notes) {
@@ -75,7 +106,7 @@ public class Board {
     }
 
     public synchronized String unPin(int pinX, int pinY) {
-        if (!pinInBounds(pinX, pinY)) {
+        if (!pointInBounds(pinX, pinY)) {
             return "ERROR OUT_OF_BOUNDS";
         } else {
             for (Note note : this.notes) {
@@ -113,87 +144,40 @@ public class Board {
         // any error cases here?
     }
 
-    // General GET
-    // GET [color=<c>] [contains=<x> <y>] [refersTo=<substring>]
-    // Parameters
-    // color=<c>: note color must equal c
-    // contains=<x> <y>: the point (x,y) must lie inside the note rectangle.
-    // refersTo=<substring>: the note message must contain the substring as a
-    // case-sensitive match
-    // Success Response
-    // OK <count>
-    // NOTE x y color message PINNED=true|false
-    // NOTE …
-
-    // Start with all notes
-    // Apply filters sequentially:
-
-    // color filter: keep only notes matching color
-    // contains filter: keep only notes where (x, y) is inside rectangle
-    // refersTo filter: keep only notes where message.contains(substring)
-
-    // Build response: "OK <count>\n" + NOTE lines
-    // Return response string
-
-    // how do we want to pass in filters? i feel like the parser should categorize
-    // the filters itself?
-    // check if parameters are valid here?
-
-    public synchronized String get(String colorFilter, Integer containsX, Integer containsY, String refersToFilter) {
+    public synchronized String get(String colorFilter, Integer containsX, Integer containsY, String refersToSubstring) {
         List<Note> results = new ArrayList<>(this.notes);
 
         if (colorFilter != null) {
-            // if colour is in the valid color list
+            if (!validColors.contains(colorFilter)) {
+                return "ERROR COLOR_NOT_SUPPORTED";
+            }
             results.removeIf(note -> !note.getColor().equals(colorFilter));
         }
 
         if (containsX != null && containsY != null) {
-            // if coordinates are out of bounds
-            if ()
+            if (!pointInBounds(containsX, containsY)) {
+                return "ERROR OUT_OF_BOUNDS";
+            }
             results.removeIf(note -> !noteContainsPoint(note, containsX, containsY));
         }
 
-        if (refersToFilter != null) {
+        if (refersToSubstring != null) {
             // if valid string??
-            results.removeIf(note -> !note.getMessage().contains(refersToFilter));
+            results.removeIf(note -> !note.getMessage().contains(refersToSubstring));
         }
 
-        String response = buildGetResponse(results);
-
-        return response;
+        return buildGetResponse(results);
     }
 
-    // GET PINS
-    // Returns coordinates of all pins on the board.
-    // Success Response
-    // OK <count>
-    // PIN x y
-    // PIN x y
-    // …
-    // Build response: "OK <count>\n" + PIN lines
     public synchronized String getPins() {
 
-        // List<Pin> allPins = new ArrayList<>();
-        // for (Note note : this.notes) {
-        //     allPins.addAll(note.pins);
-        // }
+        // ensures no duplicates
+        Set<Pin> allPins = new HashSet<>();
 
-        // StringBuilder sb = new StringBuilder();
-        // sb.append("OK ").append(allPins.size());
-        // for (Pin pin : allPins) {
-        //     sb.append("\nPIN ").append(pin.x).append(" ").append(pin.y);
-        // }
+        for (Note note : this.notes) {
+            allPins.addAll(note.getPins());
+        }
 
-        // return sb.toString();
+        return buildGetPinsResponse(allPins);
     }
-
-    // Semantics
-    // If a parameter is missing, the server ignores that filter.
-    // For example, if no color is provided, then notes of all colors are returned.
-    // If the coordinate is outside the board, the server must respond with ERROR
-    // OUT_OF_BOUNDS.
-    // Each filter type may appear at most once.
-    // If a filter type appears multiple times, the behaviour is undefined.
-    // The server MAY reject with INVALID_FORMAT or MAY use the last occurrence.
-
 }
