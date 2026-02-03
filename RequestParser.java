@@ -51,7 +51,7 @@ public class RequestParser {
             }
             String message = msgBuilder.toString();
 
-            return board.addNote(new Note(x, y, color, message); 
+            return board.addNote(x, y, color, message); 
 
         } catch (NumberFormatException e) {
             return "ERROR INVALID_FORMAT";
