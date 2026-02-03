@@ -72,7 +72,10 @@ public class Board {
 
     // Methoddssss
 
-    public synchronized String addNote(Note note) {
+    public synchronized String addNote(int x, int y, String color, String message) {
+
+        Note note = new Note(x, y, color, message, this.noteWidth, this.noteHeight);
+        
         if (!noteInBounds(note.x, note.y)) {
             return "ERROR OUT_OF_BOUNDS";
         } else if (completelyOverlaps(note.x, note.y)) {
