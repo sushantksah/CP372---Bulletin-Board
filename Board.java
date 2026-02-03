@@ -1,82 +1,83 @@
+import java.util.List;
+import java.util.ArrayList;
+// import Note.java;
+// import Pin.java;
+
 public class Board {
     private int boardWidth;
     private int boardHeight;
     private int noteWidth;
     private int noteHeight;
-    private List<String> colors;
+    private List<String> validColors;
     private List<Note> notes;
 
-    public Board(int boardWidth, int boardHeight, int noteWidth, int noteHeight, List<String> colors) {
+    public Board(int boardWidth, int boardHeight, int noteWidth, int noteHeight, List<String> validColors) {
 
         this.boardWidth = boardWidth;
         this.boardHeight = boardHeight;
         this.noteWidth = noteWidth;
+        this.noteHeight = noteHeight;
+        this.validColors = validColors;
+        this.notes = new ArrayList<>();
     }
-    // }
 
-    // public void update(Graphics g) {
-    // this.draw(g);
-    // }
+    private boolean completelyOverlaps(int x, int y) {
+        for (Note note : this.notes) {
+            if (note.contains(x, y, this.noteWidth, this.noteHeight)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-    // public void resize(int newWidth, int newHeight) {
-    // this.boardWidth = newWidth;
-    // this.boardHeight = newHeight;
-    // this.notes.clear();
-    // for (int i = 0; i < boardWidth; i++) {
-    // for (int j = 0; j < boardHeight; j++) {
-    // this.notes.add(new Note(i * noteWidth, j * noteHeight, colors.get(i %
-    // colors.size()), ""));
-    // }
-    // }
-    // }
+    private boolean noteInBounds(int x, int y) {
+        // can't have notes on the very edge? 
+        return x + noteWidth < this.boardWidth && y + noteHeight < this.boardHeight && x > 0 && y > 0;
 
-    // public void addNote(Note note) {
-    // this.notes.add(note);
-    // }
+    }
 
-    // public void removeNote(Note note) {
-    // this.notes.remove(note);
-    // }
+    private boolean pinInBounds(int x, int y) {
+        // can't have notes on the very edge? 
+        return x < this.boardWidth && y < this.boardHeight && x > 0 && y > 0;
+    }
 
-    // public void draw(Graphics g) {
-    // for (Note note : this.notes) {
-    // g.setColor(note.color);
-    // g.fillRect(note.x, note.y, note.width, note.height);
-    // }
-    // }
+    private boolean pinInNote(int pinX, int pinY, int noteX, int noteY) {
+        // can't have pins on the edge of the note
+        return this.boardWidth < pinX &&  pinX < (this.boardWidth + noteWidth) && this.boardHeight < pinY &&  pinY < (this.boardHeight + noteHeight);
 
-    // public void update(Graphics g) {
-    // this.draw(g);
-    // }
+    }
+ 
+    // Methoddssss
 
-    // public void resize(int newWidth, int newHeight) {
-    // this.boardWidth = newWidth;
-    // this.boardHeight = newHeight;
-    // this.notes.clear();
-    // for (int i = 0; i < boardWidth; i++) {
-    // for (int j = 0; j < boardHeight; j++) {
-    // this.notes.add(new Note(i * noteWidth, j * noteHeight, colors.get(i %
-    // colors.size()), ""));
-    // }
-    // }
-    // }
+    public synchronized String addNote(Note note) {
+        if (!noteInBounds(note.x, note.y)) {
+            return "ERROR OUT_OF_BOUNDS";
+        } else if (completelyOverlaps(note.x, note.y)) {
+            return "ERROR COMPLETE_OVERLAP";
+        } else if (!validColors.contains(note.color)) {
+            // ERROR COLOR_NOT_VALID
+            return "ERROR COLOR_NOT_VALID";
+        }  else {
+            this.notes.add(note);
+            // OK NOTE_POSTED
+            return "OK NOTE_POSTED";
+        }
+        
+    }
 
-    // public void addNote(Note note) {
-    // this.notes.add(note);
-    // }
-
-    // public void removeNote(Note note) {
-    // this.notes.remove(note);
-    // }
-
-    // public void draw(Graphics g) {
-    // for (Note note : this.notes) {
-    // g.setColor(note.color);
-    // g.fillRect(note.x, note.y, note.width, note.height);
-    // }
-    // }
-
-    // public void update(Graphics g) {
-    // this.draw(g);
-    // }
+    public synchronized String addPin(int pinX, int pinY){
+        if (!pinInBounds(pinX, pinY)) {
+            return "ERROR OUT_OF_BOUNDS";
+        } else {
+            for (Note note : this.notes) {
+                if (pinInNote(pinX, pinY, note.x, note.y)) {
+                    note.addPin(new Pin(pinX, pinY));
+                    return "OK PIN_POSTED";
+                } else {
+                    return "ERROR OUT_OF_BOUNDS"; // don't know if this is the right error message
+                }
+            }
+            return "OK PIN_POSTED";
+        }
+    }
 }
