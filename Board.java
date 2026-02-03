@@ -40,12 +40,6 @@ public class Board {
         // can't have notes on the very edge? 
         return x < this.boardWidth && y < this.boardHeight && x > 0 && y > 0;
     }
-
-    private boolean pinInNote(int pinX, int pinY, int noteX, int noteY) {
-        // can't have pins on the edge of the note
-        return this.boardWidth < pinX &&  pinX < (this.boardWidth + noteWidth) && this.boardHeight < pinY &&  pinY < (this.boardHeight + noteHeight);
-
-    }
  
     // Methoddssss
 
@@ -70,7 +64,7 @@ public class Board {
             return "ERROR OUT_OF_BOUNDS";
         } else {
             for (Note note : this.notes) {
-                if (pinInNote(pinX, pinY, note.x, note.y)) {
+                if (note.contains(pinX, pinY)) {
                     note.addPin(new Pin(pinX, pinY));
                     return "OK PIN_POSTED";
                 } else {
