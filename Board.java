@@ -68,7 +68,6 @@ public class Board {
         }
 
         return sb.toString();
-
     }
 
     // Methoddssss
@@ -158,7 +157,7 @@ public class Board {
             if (!pointInBounds(containsX, containsY)) {
                 return "ERROR OUT_OF_BOUNDS";
             }
-            results.removeIf(note -> !noteContainsPoint(note, containsX, containsY));
+            results.removeIf(note -> !note.containsPoint(containsX, containsY));
         }
 
         if (refersToSubstring != null) {
