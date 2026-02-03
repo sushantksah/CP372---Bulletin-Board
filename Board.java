@@ -1,7 +1,5 @@
 import java.util.List;
 import java.util.ArrayList;
-// import Note.java;
-// import Pin.java;
 
 public class Board {
     private int boardWidth;
