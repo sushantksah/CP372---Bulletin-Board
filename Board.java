@@ -23,7 +23,7 @@ public class Board {
 
     private boolean completelyOverlaps(int x, int y) {
         for (Note note : this.notes) {
-            if (note.containsPoint(x, y, this.noteWidth, this.noteHeight)) {
+            if (note.containsPoint(x, y)) {
                 return true;
             }
         }
@@ -89,45 +89,50 @@ public class Board {
     }
 
     public synchronized String addPin(int pinX, int pinY) {
-        if (!pointInBounds(pinX, pinY)) {
+        if (!pointInBounds(pinX, pinY))
             return "ERROR OUT_OF_BOUNDS";
-        } else {
-            for (Note note : this.notes) {
-                if (note.containsPoint(pinX, pinY)) {
-                    note.addPin(new Pin(pinX, pinY));
-                    return "OK PIN_POSTED";
-                } else {
-                    return "ERROR OUT_OF_BOUNDS"; // don't know if this is the right error message
-                }
+
+        boolean placed = false;
+        for (Note note : this.notes) {
+            if (note.containsPoint(pinX, pinY)) {
+                note.addPin(new Pin(pinX, pinY));
+                placed = true;
             }
-            return "OK PIN_POSTED";
         }
+        return placed ? "OK PIN_POSTED" : "ERROR NO_NOTE_AT_COORDINATE";
     }
 
     public synchronized String unPin(int pinX, int pinY) {
         if (!pointInBounds(pinX, pinY)) {
             return "ERROR OUT_OF_BOUNDS";
-        } else {
-            for (Note note : this.notes) {
-                for (Pin pin : note.pins) {
-                    if (pin.equals(new Pin(pinX, pinY))) {
-                        note.removePin(pin); // remove pin method
-                        return "OK PIN_REMOVED";
-                    }
+        }
+
+        boolean found = false;
+        Pin targetPin = new Pin(pinX, pinY);
+
+        for (Note note : this.notes) {
+            if (note.getPins().removeIf(p -> p.equals(targetPin))) {
+                found = true;
+                if (note.getPins().isEmpty()) {
+                    note.setPinStatus(false);
                 }
             }
-            return "ERROR PIN_NOT_FOUND";
         }
+
+        return found ? "OK PIN_REMOVED" : "ERROR PIN_NOT_FOUND";
     }
 
     public synchronized String shake() {
-        List<Note> notesToRemove = new ArrayList<>();
-        for (Note note : this.notes) {
-            if (note.pins.isEmpty()) {
-                notesToRemove.add(note);
-            }
-        }
-        this.notes.removeAll(notesToRemove); // does this remove the pins too?
+        // List<Note> notesToRemove = new ArrayList<>();
+        // for (Note note : this.notes) {
+        //     if (note.pins.isEmpty()) {
+        //         notesToRemove.add(note);
+        //     }
+        // }
+        // this.notes.removeAll(notesToRemove);
+
+        this.notes.removeIf(note -> note.getPins().isEmpty());
+
         return "OK SHAKE_COMPLETE";
         // any error cases here?
     }
@@ -161,7 +166,8 @@ public class Board {
         }
 
         if (refersToSubstring != null) {
-            // if valid string??
+            // if valid string?? - should be checked here or somehwere else
+            // get message can be empty? how are we approaching empty again?    
             results.removeIf(note -> !note.getMessage().contains(refersToSubstring));
         }
 
