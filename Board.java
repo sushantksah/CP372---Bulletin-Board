@@ -23,7 +23,7 @@ public class Board {
 
     private boolean completelyOverlaps(int x, int y) {
         for (Note note : this.notes) {
-            if (note.contains(x, y, this.noteWidth, this.noteHeight)) {
+            if (note.containsPoint(x, y, this.noteWidth, this.noteHeight)) {
                 return true;
             }
         }
@@ -93,7 +93,7 @@ public class Board {
             return "ERROR OUT_OF_BOUNDS";
         } else {
             for (Note note : this.notes) {
-                if (note.contains(pinX, pinY)) {
+                if (note.containsPoint(pinX, pinY)) {
                     note.addPin(new Pin(pinX, pinY));
                     return "OK PIN_POSTED";
                 } else {
