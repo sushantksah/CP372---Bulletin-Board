@@ -75,7 +75,7 @@ public class Board {
     public synchronized String addNote(int x, int y, String color, String message) {
 
         Note note = new Note(x, y, color, message, this.noteWidth, this.noteHeight);
-        
+
         if (!noteInBounds(note.x, note.y)) {
             return "ERROR OUT_OF_BOUNDS";
         } else if (completelyOverlaps(note.x, note.y)) {
@@ -102,7 +102,8 @@ public class Board {
                 placed = true;
             }
         }
-        return placed ? "OK PIN_POSTED" : "ERROR NO_NOTE_AT_COORDINATE";
+
+        return placed ? "OK PIN_ADDED" : "ERROR NO_NOTE_AT_COORDINATE";
     }
 
     public synchronized String unPin(int pinX, int pinY) {
@@ -128,9 +129,9 @@ public class Board {
     public synchronized String shake() {
         // List<Note> notesToRemove = new ArrayList<>();
         // for (Note note : this.notes) {
-        //     if (note.pins.isEmpty()) {
-        //         notesToRemove.add(note);
-        //     }
+        // if (note.pins.isEmpty()) {
+        // notesToRemove.add(note);
+        // }
         // }
         // this.notes.removeAll(notesToRemove);
 
@@ -170,7 +171,7 @@ public class Board {
 
         if (refersToSubstring != null) {
             // if valid string?? - should be checked here or somehwere else
-            // get message can be empty? how are we approaching empty again?    
+            // get message can be empty? how are we approaching empty again?
             results.removeIf(note -> !note.getMessage().contains(refersToSubstring));
         }
 
