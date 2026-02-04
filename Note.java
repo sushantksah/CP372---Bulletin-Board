@@ -6,8 +6,8 @@ public class Note {
     public final int noteWidth, noteHeight;
     public final String color;
     public final String message;
-    public List<Pin> pins;
-    public boolean isPinned;
+    private List<Pin> pins;
+    private boolean isPinned;
     public final int MAX_MESSAGE_LENGTH = 256;
 
 
