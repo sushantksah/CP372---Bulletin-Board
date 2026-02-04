@@ -94,16 +94,21 @@ public class Board {
     public synchronized String addPin(int pinX, int pinY) {
         if (!pointInBounds(pinX, pinY))
             return "ERROR OUT_OF_BOUNDS";
-
-        boolean placed = false;
+        
+        boolean noteFound = false;
         for (Note note : this.notes) {
             if (note.containsPoint(pinX, pinY)) {
+                noteFound = true;
+                if (note.hasPinAt(pinX, pinY)) {
+                    continue; // skips adding but it won't cause an error
+                }
                 note.addPin(new Pin(pinX, pinY));
-                placed = true;
             }
         }
 
-        return placed ? "OK PIN_ADDED" : "ERROR NO_NOTE_AT_COORDINATE";
+        if (!noteFound) {
+            return "ERROR NO_NOTE_AT_COORDINATE";
+        }
     }
 
     public synchronized String unPin(int pinX, int pinY) {
