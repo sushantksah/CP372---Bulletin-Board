@@ -12,7 +12,6 @@ public class ClientHandler implements Runnable {
         this.board = board;
     }
 
-
     @Override
     public void run() {
         try (
@@ -23,9 +22,9 @@ public class ClientHandler implements Runnable {
 
             String line;
             while ((line = in.readLine()) != null) {
-                line = line.trim(); 
+                line = line.stripTrailing(); 
                 if (line.isEmpty()) {
-                    out.println("ERROR INVALID_FORMAT Empty command");
+                    out.println("ERROR INVALID_FORMAT");
                     continue;
                 }
 
@@ -38,6 +37,7 @@ public class ClientHandler implements Runnable {
                 }
             }
         } catch (Exception e) {
+            System.err.println("Client handler error: " + e.getMessage());
         } finally {
             try { socket.close(); } catch (IOException ignored) {}
         }
