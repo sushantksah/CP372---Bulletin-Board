@@ -1,7 +1,8 @@
-import java.util.List;
 import java.util.ArrayList;
-import java.util.Set;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class Board {
     private int boardWidth;
@@ -94,21 +95,25 @@ public class Board {
     public synchronized String addPin(int pinX, int pinY) {
         if (!pointInBounds(pinX, pinY))
             return "ERROR OUT_OF_BOUNDS";
-        
+    
         boolean noteFound = false;
+    
         for (Note note : this.notes) {
             if (note.containsPoint(pinX, pinY)) {
                 noteFound = true;
+    
                 if (note.hasPinAt(pinX, pinY)) {
-                    continue; // skips adding but it won't cause an error
+                    continue; // ignore duplicates
                 }
                 note.addPin(new Pin(pinX, pinY));
             }
         }
-
+    
         if (!noteFound) {
             return "ERROR NO_NOTE_AT_COORDINATE";
         }
+    
+        return "OK PIN_ADDED";
     }
 
     public synchronized String unPin(int pinX, int pinY) {
@@ -148,7 +153,7 @@ public class Board {
 
     public synchronized String clear() {
         for (Note note : this.notes) {
-            note.pins.clear();
+            note.clearPins();
         }
 
         this.notes.clear();
@@ -162,7 +167,7 @@ public class Board {
 
         if (colorFilter != null) {
             if (!validColors.contains(colorFilter)) {
-                return "ERROR COLOR_NOT_SUPPORTED";
+                return "ERROR COLOR_NOT_VALID";
             }
             results.removeIf(note -> !note.getColor().equals(colorFilter));
         }
@@ -182,6 +187,25 @@ public class Board {
 
         return buildGetResponse(results);
     }
+
+    // Wrapper class for GET
+    public String getNotes(String color, Integer x, Integer y, String refersTo) {
+        return get(color, x, y, refersTo);
+    }
+
+    public String greetingLine() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(boardWidth).append(" ").append(boardHeight).append(" ")
+          .append(noteWidth).append(" ").append(noteHeight);
+        for (String c : validColors) sb.append(" ").append(c);
+        return sb.toString();
+    }
+
+    public List<String> handleCommand(String line) {
+    // RequestParser returns a multi-line String (likely)
+    String resp = RequestParser.parseAndExecute(line, this);// if your method name differs, adjust
+    return Arrays.asList(resp.split("\n", -1));
+}
 
     public synchronized String getPins() {
 

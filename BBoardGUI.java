@@ -19,6 +19,8 @@ public class BBoardGUI extends JFrame {
     private JTextField portField = new JTextField("8080");
     private JButton connectBtn = new JButton("Connect");
     private JButton disconnectBtn = new JButton("Disconnect");
+    private VisualPanel visualPanel = new VisualPanel();
+    private java.util.List<VisualPanel.NoteView> lastNotes = new ArrayList<>();
 
     private JLabel greetingLabel = new JLabel("Not connected");
 
@@ -60,7 +62,9 @@ public class BBoardGUI extends JFrame {
         add(root, BorderLayout.CENTER);
 
         root.add(buildConnectionPanel(), BorderLayout.NORTH);
-        root.add(buildMainPanel(), BorderLayout.CENTER);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildMainPanel(), visualPanel);
+        split.setResizeWeight(0.55); 
+        root.add(split, BorderLayout.CENTER);
         root.add(new JScrollPane(logArea), BorderLayout.SOUTH);
 
         setConnected(false);
@@ -240,6 +244,10 @@ public class BBoardGUI extends JFrame {
             validColors.addAll(Arrays.asList(parts).subList(4, parts.length));
 
             SwingUtilities.invokeLater(() -> {
+                visualPanel.setBoardConfig(boardW, boardH, noteW, noteH, validColors);
+                visualPanel.setNotes(lastNotes);
+            });
+            SwingUtilities.invokeLater(() -> {
                 colorBox.removeAllItems();
                 for (String c : validColors) colorBox.addItem(c);
                 if (colorBox.getItemCount() > 0) colorBox.setSelectedIndex(0);
@@ -263,6 +271,7 @@ public class BBoardGUI extends JFrame {
 
         String cmd = "POST " + x + " " + y + " " + color + " " + msg;
         sendCommand(cmd);
+        sendCommand("GET");
     }
 
     private void doGet() {
@@ -331,21 +340,36 @@ public class BBoardGUI extends JFrame {
                     return;
                 }
                 appendLog("SERVER: " + first);
+                if (cmd.startsWith("POST ") && first.equals("OK NOTE_POSTED")) {
+                    sendCommand("GET");
+                }
 
                 // If response is "OK <number>", read that many additional lines
                 // This matches your common pattern for GET/GET PINS returning counts.
                 int extra = parseOkCount(first);
+                List<String> lines = new ArrayList<>();
                 for (int i = 0; i < extra; i++) {
-                    String line = in.readLine();
-                    if (line == null) break;
-                    appendLog("SERVER: " + line);
+                    String l = in.readLine();
+                    if (l == null) break;
+                    lines.add(l);
+                    appendLog("SERVER: " + l);
+                }
+                
+                // If this was a GET (not GET PINS), render notes
+                if (cmd.equals("GET") || cmd.startsWith("GET ")) {
+                    // ignore GET PINS
+                    if (!cmd.equals("GET PINS")) {
+                        List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
+                        lastNotes = parsed;
+                        SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+                    }
                 }
 
-                // If server says disconnecting, close
                 if (first.equals("OK DISCONNECTING")) {
                     cleanup();
                     SwingUtilities.invokeLater(() -> setConnected(false));
                 }
+
 
             } catch (Exception ex) {
                 appendLog("CLIENT: error: " + ex.getMessage());
@@ -404,4 +428,46 @@ public class BBoardGUI extends JFrame {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new BBoardGUI().setVisible(true));
     }
+
+    private List<VisualPanel.NoteView> parseNotesFromLines(List<String> lines) {
+        List<VisualPanel.NoteView> out = new ArrayList<>();
+    
+        for (String l : lines) {
+            // Expected format from your Board.get():
+            // NOTE x y color message... PINNED=true/false
+            if (l == null) continue;
+            l = l.trim();
+            if (!l.startsWith("NOTE ")) continue;
+    
+            try {
+                // Split first 4 tokens: NOTE x y color
+                String[] first4 = l.split("\\s+", 5);
+                if (first4.length < 5) continue;
+    
+                int x = Integer.parseInt(first4[1]);
+                int y = Integer.parseInt(first4[2]);
+                String color = first4[3];
+    
+                // remaining contains "message... PINNED=..."
+                String rest = first4[4];
+    
+                boolean pinned = false;
+                String message = rest;
+    
+                int idx = rest.lastIndexOf(" PINNED=");
+                if (idx >= 0) {
+                    message = rest.substring(0, idx);
+                    String pv = rest.substring(idx + " PINNED=".length() + 1).trim();
+                    // pv might be "true" or "false" (or include extra)
+                    pinned = pv.startsWith("true");
+                }
+    
+                out.add(new VisualPanel.NoteView(x, y, color, message, pinned));
+            } catch (Exception ignored) {
+            }
+        }
+    
+        return out;
+    }
+
 }

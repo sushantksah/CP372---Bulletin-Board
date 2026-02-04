@@ -1,4 +1,3 @@
-import java.util.*;
 
 public class RequestParser {
 
@@ -71,68 +70,61 @@ public class RequestParser {
     }
 
     private static String handleGet(String[] splitRequest, Board board) {
-        // if only get pins check for case then get pins
-        if (splitRequest.length == 2) {
-            if (splitRequest[1].equals("PINS")) {
-                return board.getPins();
-            } else {
-                return "ERROR INVALID_FORMAT"; // message
-            }
 
-            String color = null;
-            Integer x = null, y = null;
-            String refersTo = null;
-
-            // allows for different argument ordering and duplicate filters
-            for (int i = 1; i < splitRequest.length; i++) {
-                String p = splitRequest[i];
-
-                if (p.startsWith("color=")) {
-                    if (color != null)
-                        return "ERROR INVALID_FORMAT"; // Duplicate check
-                    color = p.substring(6);
-                    if (color.isEmpty())
-                        return "ERROR INVALID_FORMAT";
-                } else if (p.startsWith("contains=")) {
-                    if (x != null)
-                        return "ERROR INVALID_FORMAT"; // Duplicate check
-                    // ex if you had xy
-                    if (i + 1 >= splitRequest.length) {
-                        return "ERROR INVALID_FORMAT";
-                    }
-                    // would reject something like x*y or 10 20abc
-                    try {
-                        x = Integer.parseInt(p.substring(9));
-                        y = Integer.parseInt(splitRequest[++i]);
-                    } catch (Exception e) {
-                        return "ERROR INVALID_FORMAT";
-                    }
-                } else if (p.startsWith("refersTo=")) {
-                    if (refersTo != null)
-                        return "ERROR INVALID_FORMAT"; // Duplicate check
-
-                    StringBuilder sb = new StringBuilder(p.substring(9));
-
-                    for (int j = i + 1; j < splitRequest.length; j++) {
-                        sb.append(" ").append(splitRequest[j]);
-                    }
-
-                    refersTo = sb.toString();
-                    if (refersTo.trim().isEmpty() || refersTo.length() > Note.MAX_MESSAGE_LENGTH) {
-                        return "ERROR INVALID_FORMAT";
-                    }
-                    // VERY IMPORTANT: Tell the main loop we are done
-                    break;
-
-                } else {
-                    // This catches "incorrect argument ordering"
-                    // e.g., if they put '10 20' without 'contains='
+        // "GET" with no args
+        if (splitRequest.length == 1) {
+            return board.getNotes(null, null, null, null);
+        }
+    
+        // "GET PINS"
+        if (splitRequest.length == 2 && splitRequest[1].equals("PINS")) {
+            return board.getPins();
+        }
+    
+        // Otherwise: GET [color=<c>] [contains=<x> <y>] [refersTo=<substring>]
+        String color = null;
+        Integer x = null, y = null;
+        String refersTo = null;
+    
+        for (int i = 1; i < splitRequest.length; i++) {
+            String p = splitRequest[i];
+    
+            if (p.startsWith("color=")) {
+                if (color != null) return "ERROR INVALID_FORMAT";
+                color = p.substring(6);
+                if (color.isEmpty()) return "ERROR INVALID_FORMAT";
+    
+            } else if (p.startsWith("contains=")) {
+                if (x != null) return "ERROR INVALID_FORMAT";
+                if (i + 1 >= splitRequest.length) return "ERROR INVALID_FORMAT";
+    
+                try {
+                    x = Integer.parseInt(p.substring(9));
+                    y = Integer.parseInt(splitRequest[++i]);
+                } catch (Exception e) {
                     return "ERROR INVALID_FORMAT";
                 }
+    
+            } else if (p.startsWith("refersTo=")) {
+                if (refersTo != null) return "ERROR INVALID_FORMAT";
+    
+                StringBuilder sb = new StringBuilder(p.substring(9));
+                for (int j = i + 1; j < splitRequest.length; j++) {
+                    sb.append(" ").append(splitRequest[j]);
+                }
+    
+                refersTo = sb.toString();
+                if (refersTo.trim().isEmpty() || refersTo.length() > Note.MAX_MESSAGE_LENGTH) {
+                    return "ERROR INVALID_FORMAT";
+                }
+                break;
+    
+            } else {
+                return "ERROR INVALID_FORMAT";
             }
-            return board.getNotes(color, x, y, refersTo);
         }
-
+    
+        return board.getNotes(color, x, y, refersTo);
     }
 
     private static String handlePin(String[] splitRequest, Board board) {

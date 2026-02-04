@@ -9,7 +9,8 @@ public class Note {
     private List<Pin> pins;
     private boolean isPinned;
 
-    public final int MAX_MESSAGE_LENGTH = 256;
+    // MUST be static if other classes call Note.MAX_MESSAGE_LENGTH
+    public static final int MAX_MESSAGE_LENGTH = 256;
 
     public Note(int x, int y, String color, String message, int noteWidth, int noteHeight) {
         this.x = x;
@@ -20,65 +21,42 @@ public class Note {
         this.message = message;
         this.pins = new ArrayList<>();
         this.isPinned = false;
-
     }
 
-    public String getColor() {
-        return this.color;
-    }
+    public int getX() { return this.x; }
+    public int getY() { return this.y; }
 
-    public String getMessage() {
-        return this.message;
-    }
+    public String getColor() { return this.color; }
+    public String getMessage() { return this.message; }
+    public List<Pin> getPins() { return this.pins; }
+    public boolean getPinnedStatus() { return this.isPinned; }
 
-    public List<Pin> getPins() {
-        return this.pins;
-    }
-
-    public boolean getPinnedStatus() {
-        return this.isPinned;
-    }
-
-    // Setters
-    public void setPinStatus(boolean bool) {
-        this.isPinned = bool;
-    }
+    public void setPinStatus(boolean bool) { this.isPinned = bool; }
 
     public void addPin(Pin pin) {
         this.pins.add(pin);
-
-        // no longer 0 pins
-        if (this.pins.size() == 1) {
-            this.isPinned = true;
-        }
+        if (this.pins.size() == 1) this.isPinned = true;
     }
 
     public void removePin(Pin pin) {
         this.pins.remove(pin);
+        if (this.pins.size() == 0) this.isPinned = false;
+    }
 
-        // no longer 0 pins
-        if (this.pins.size() == 0) {
-            this.isPinned = false;
+    public boolean hasPinAt(int pinX, int pinY) {
+        for (Pin p : pins) {
+            if (p.getX() == pinX && p.getY() == pinY) return true;
         }
+        return false;
     }
 
-    // Containment, ensuring that the points lie within the note rectangle
-    // pins cannot be on the edge of the note
+    public void clearPins() {
+        this.pins.clear();
+        this.isPinned = false;
+    }
+
     public boolean containsPoint(int pointX, int pointY) {
-        return this.x < pointX && pointX < (this.noteWidth + this.x) && this.y < pointY
-                && pointY < (noteHeight + this.y);
+        return this.x < pointX && pointX < (this.noteWidth + this.x)
+            && this.y < pointY && pointY < (noteHeight + this.y);
     }
-
 }
- 
-
-    
-
-    
-    
-
-    
-        
-    
-
- 
