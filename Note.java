@@ -8,8 +8,11 @@ public class Note {
     public final String message;
     public List<Pin> pins;
     public boolean isPinned;
+    public final int MAX_MESSAGE_LENGTH = 256;
 
-    public Note(int x, int y, String color, String message, int noteWidth, int noteHeight) {
+
+// i can't remember if note width and height are passed in here or not
+    public Note(int x, int y, String color, String message, int noteWidth, int noteHeight, List<Pin> pins, boolean isPinned) {
         this.x = x;
         this.y = y;
         this.noteWidth = noteWidth;
