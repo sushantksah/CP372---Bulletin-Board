@@ -1,5 +1,7 @@
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
 
 public class Board {
     private int boardWidth;
@@ -21,7 +23,7 @@ public class Board {
 
     private boolean completelyOverlaps(int x, int y) {
         for (Note note : this.notes) {
-            if (note.contains(x, y, this.noteWidth, this.noteHeight)) {
+            if (note.containsPoint(x, y)) {
                 return true;
             }
         }
@@ -29,20 +31,51 @@ public class Board {
     }
 
     private boolean noteInBounds(int x, int y) {
-        // can't have notes on the very edge? 
+        // can't have notes on the very edge?
         return x + noteWidth < this.boardWidth && y + noteHeight < this.boardHeight && x > 0 && y > 0;
 
     }
 
-    private boolean pinInBounds(int x, int y) {
-        // can't have notes on the very edge? 
+    private boolean pointInBounds(int x, int y) {
+        // can't have notes on the very edge?
         return x < this.boardWidth && y < this.boardHeight && x > 0 && y > 0;
     }
 
- 
+    private String buildGetResponse(List<Note> results) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("OK ").append(results.size());
+
+        for (Note note : results) {
+            sb.append("\nNOTE ").append(note.getX()).append(" ").append(note.getY()).append(" ").append(note.getColor())
+                    .append(" ").append(note.getMessage()).append(" PINNED=").append(note.getPinnedStatus());
+        }
+
+        return sb.toString();
+    }
+
+    private String buildGetPinsResponse(Set<Pin> allPins) {
+
+        // OK <count>
+        // PIN x y
+        // PIN x y
+        // …
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("OK ").append(allPins.size());
+
+        for (Pin pin : allPins) {
+            sb.append("\nPIN ").append(pin.getX()).append(" ").append(pin.getY());
+        }
+
+        return sb.toString();
+    }
+
     // Methoddssss
 
-    public synchronized String addNote(Note note) {
+    public synchronized String addNote(int x, int y, String color, String message) {
+
+        Note note = new Note(x, y, color, message, this.noteWidth, this.noteHeight);
+
         if (!noteInBounds(note.x, note.y)) {
             return "ERROR OUT_OF_BOUNDS";
         } else if (completelyOverlaps(note.x, note.y)) {
@@ -50,27 +83,115 @@ public class Board {
         } else if (!validColors.contains(note.color)) {
             // ERROR COLOR_NOT_VALID
             return "ERROR COLOR_NOT_VALID";
-        }  else {
+        } else {
             this.notes.add(note);
             // OK NOTE_POSTED
             return "OK NOTE_POSTED";
         }
-        
+
     }
 
-    public synchronized String addPin(int pinX, int pinY){
-        if (!pinInBounds(pinX, pinY)) {
+    public synchronized String addPin(int pinX, int pinY) {
+        if (!pointInBounds(pinX, pinY))
             return "ERROR OUT_OF_BOUNDS";
-        } else {
-            for (Note note : this.notes) {
-                if (note.contains(pinX, pinY)) {
-                    note.addPin(new Pin(pinX, pinY));
-                    return "OK PIN_POSTED";
-                } else {
-                    return "ERROR OUT_OF_BOUNDS"; // don't know if this is the right error message
+        
+        boolean noteFound = false;
+        for (Note note : this.notes) {
+            if (note.containsPoint(pinX, pinY)) {
+                noteFound = true;
+                if (note.hasPinAt(pinX, pinY)) {
+                    continue; // skips adding but it won't cause an error
+                }
+                note.addPin(new Pin(pinX, pinY));
+            }
+        }
+
+        if (!noteFound) {
+            return "ERROR NO_NOTE_AT_COORDINATE";
+        }
+    }
+
+    public synchronized String unPin(int pinX, int pinY) {
+        if (!pointInBounds(pinX, pinY)) {
+            return "ERROR OUT_OF_BOUNDS";
+        }
+
+        boolean found = false;
+        Pin targetPin = new Pin(pinX, pinY);
+
+        for (Note note : this.notes) {
+            if (note.getPins().removeIf(p -> p.equals(targetPin))) {
+                found = true;
+                if (note.getPins().isEmpty()) {
+                    note.setPinStatus(false);
                 }
             }
-            return "OK PIN_POSTED";
         }
+
+        return found ? "OK PIN_REMOVED" : "ERROR PIN_NOT_FOUND";
+    }
+
+    public synchronized String shake() {
+        // List<Note> notesToRemove = new ArrayList<>();
+        // for (Note note : this.notes) {
+        // if (note.pins.isEmpty()) {
+        // notesToRemove.add(note);
+        // }
+        // }
+        // this.notes.removeAll(notesToRemove);
+
+        this.notes.removeIf(note -> note.getPins().isEmpty());
+
+        return "OK SHAKE_COMPLETE";
+        // any error cases here?
+    }
+
+    public synchronized String clear() {
+        for (Note note : this.notes) {
+            note.pins.clear();
+        }
+
+        this.notes.clear();
+
+        return "OK CLEAR_COMPLETE";
+        // any error cases here?
+    }
+
+    public synchronized String get(String colorFilter, Integer containsX, Integer containsY, String refersToSubstring) {
+        List<Note> results = new ArrayList<>(this.notes);
+
+        if (colorFilter != null) {
+            if (!validColors.contains(colorFilter)) {
+                return "ERROR COLOR_NOT_SUPPORTED";
+            }
+            results.removeIf(note -> !note.getColor().equals(colorFilter));
+        }
+
+        if (containsX != null && containsY != null) {
+            if (!pointInBounds(containsX, containsY)) {
+                return "ERROR OUT_OF_BOUNDS";
+            }
+            results.removeIf(note -> !note.containsPoint(containsX, containsY));
+        }
+
+        if (refersToSubstring != null) {
+            // if valid string?? - should be checked here or somehwere else
+            // get message can be empty? how are we approaching empty again?
+            results.removeIf(note -> !note.getMessage().contains(refersToSubstring));
+        }
+
+        return buildGetResponse(results);
+    }
+
+    public synchronized String getPins() {
+
+        // ensures no duplicates
+        Set<Pin> allPins = new HashSet<>();
+
+        for (Note note : this.notes) {
+            allPins.addAll(note.getPins());
+        }
+
+        return buildGetPinsResponse(allPins);
     }
 }
