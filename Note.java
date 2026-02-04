@@ -12,7 +12,7 @@ public class Note {
 
 
 // i can't remember if note width and height are passed in here or not
-    public Note(int x, int y, String color, String message, int noteWidth, int noteHeight, List<Pin> pins, boolean isPinned) {
+    public Note(int x, int y, String color, String message, int noteWidth, int noteHeight) {
         this.x = x;
         this.y = y;
         this.noteWidth = noteWidth;
@@ -34,6 +34,10 @@ public class Note {
 
     public String getColor() {
         return this.color;
+    }
+
+    public String getMessage() {
+        return this.message;
     }
 
     public List<Pin> getPins() {
@@ -73,5 +77,4 @@ public class Note {
         return this.x < pointX && pointX < (this.noteWidth + this.x) && this.y < pointY
                 && pointY < (noteHeight + this.y);
     }
-
 }
