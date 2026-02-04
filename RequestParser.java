@@ -154,7 +154,7 @@ public class RequestParser {
         if (splitRequest.length != 3) return "ERROR INVALID_FORMAT";
         
         try {
-            return board.unpin(Integer.parseInt(splitRequest[1]), Integer.parseInt(splitRequest[2]));
+            return board.unPin(Integer.parseInt(splitRequest[1]), Integer.parseInt(splitRequest[2]));
         } catch (NumberFormatException e) {
             return "ERROR INVALID_FORMAT";
         }
