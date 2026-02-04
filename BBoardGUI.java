@@ -1,28 +1,26 @@
 import java.awt.*;
-import java.io.*;
-import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
-public class BBoardGUI extends JFrame {
+/**
+ * BBoard client GUI (migrated from ClientGUI). Uses BBoardClient as the engine: no direct socket or parsing.
+ * Same logic as ClientGUI: connect (with Local test dummy), initializeBoard/updateStatus/displayError/refreshBoard
+ * called by BBoardClient; builds raw RFC strings and calls networkClient.sendRequest().
+ */
+public class BBoardGUI extends JFrame implements BBoardClient.GuiCallback {
 
-    // Network
-    private Socket socket;
-    private BufferedReader in;
-    private PrintWriter out;
+    private final BBoardClient networkClient;
 
-    // UI fields
     private JTextField hostField = new JTextField("localhost");
-    private JTextField portField = new JTextField("8080");
+    private JTextField portField = new JTextField("4554");
+    private JCheckBox localTestCheckBox = new JCheckBox("Local test (no server)", true);
     private JButton connectBtn = new JButton("Connect");
     private JButton disconnectBtn = new JButton("Disconnect");
-    private VisualPanel visualPanel = new VisualPanel();
-    private java.util.List<VisualPanel.NoteView> lastNotes = new ArrayList<>();
-
     private JLabel greetingLabel = new JLabel("Not connected");
+
+    private VisualPanel visualPanel = new VisualPanel();
 
     private JComboBox<String> colorBox = new JComboBox<>();
     private JTextField xField = new JTextField("0");
@@ -32,24 +30,23 @@ public class BBoardGUI extends JFrame {
     private JButton postBtn = new JButton("POST");
     private JButton getBtn = new JButton("GET");
     private JButton getPinsBtn = new JButton("GET PINS");
+    private JTextField pinXField = new JTextField("0", 4);
+    private JTextField pinYField = new JTextField("0", 4);
     private JButton pinBtn = new JButton("PIN");
     private JButton unpinBtn = new JButton("UNPIN");
     private JButton shakeBtn = new JButton("SHAKE");
     private JButton clearBtn = new JButton("CLEAR");
 
-    private JTextField getColorFilterField = new JTextField("");      // optional: color filter
-    private JTextField getContainsXField = new JTextField("");        // optional: contains x
-    private JTextField getContainsYField = new JTextField("");        // optional: contains y
-    private JTextField getRefersToField = new JTextField("");         // optional: refersTo text
+    private JTextField getColorFilterField = new JTextField("");
+    private JTextField getContainsXField = new JTextField("");
+    private JTextField getContainsYField = new JTextField("");
+    private JTextField getRefersToField = new JTextField("");
 
     private JTextArea logArea = new JTextArea(18, 60);
 
-    // Parsed greeting info (optional for display/validation)
-    private Integer boardW, boardH, noteW, noteH;
-    private List<String> validColors = new ArrayList<>();
-
-    public BBoardGUI() {
+    public BBoardGUI(BBoardClient client) {
         super("BBoard Client GUI");
+        this.networkClient = client;
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
         setResizable(true);
@@ -63,12 +60,13 @@ public class BBoardGUI extends JFrame {
 
         root.add(buildConnectionPanel(), BorderLayout.NORTH);
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildMainPanel(), visualPanel);
-        split.setResizeWeight(0.55); 
+        split.setResizeWeight(0.55);
         root.add(split, BorderLayout.CENTER);
         root.add(new JScrollPane(logArea), BorderLayout.SOUTH);
 
         setConnected(false);
         pack();
+        setSize(700, 620);
         setLocationRelativeTo(null);
 
         wireActions();
@@ -91,11 +89,13 @@ public class BBoardGUI extends JFrame {
         p.add(portField, c);
 
         c.gridx = 4; c.gridy = 0; c.weightx = 0;
+        p.add(localTestCheckBox, c);
+        c.gridx = 5; c.gridy = 0; c.weightx = 0;
         p.add(connectBtn, c);
-        c.gridx = 5; c.gridy = 0;
+        c.gridx = 6; c.gridy = 0;
         p.add(disconnectBtn, c);
 
-        c.gridx = 0; c.gridy = 1; c.gridwidth = 6;
+        c.gridx = 0; c.gridy = 1; c.gridwidth = 7;
         greetingLabel.setOpaque(true);
         greetingLabel.setBackground(new Color(245, 245, 245));
         greetingLabel.setBorder(new EmptyBorder(6, 8, 6, 8));
@@ -112,6 +112,10 @@ public class BBoardGUI extends JFrame {
         commands.add(buildGetPanel());
 
         JPanel quick = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        quick.add(new JLabel("PIN/UNPIN x:"));
+        quick.add(pinXField);
+        quick.add(new JLabel("y:"));
+        quick.add(pinYField);
         quick.add(pinBtn);
         quick.add(unpinBtn);
         quick.add(getPinsBtn);
@@ -175,107 +179,158 @@ public class BBoardGUI extends JFrame {
     }
 
     private void wireActions() {
-        connectBtn.addActionListener(e -> connect());
-        disconnectBtn.addActionListener(e -> sendDisconnect());
+        connectBtn.addActionListener(e -> onConnect());
+        disconnectBtn.addActionListener(e -> onDisconnect());
 
         postBtn.addActionListener(e -> doPost());
         getBtn.addActionListener(e -> doGet());
-        getPinsBtn.addActionListener(e -> sendCommand("GET PINS"));
+        getPinsBtn.addActionListener(e -> doGetPins());
         pinBtn.addActionListener(e -> doPin());
         unpinBtn.addActionListener(e -> doUnpin());
-        shakeBtn.addActionListener(e -> sendCommand("SHAKE"));
-        clearBtn.addActionListener(e -> sendCommand("CLEAR"));
+        shakeBtn.addActionListener(e -> doShake());
+        clearBtn.addActionListener(e -> doClear());
     }
 
-    private void connect() {
-        if (isConnected()) return;
-
+    private void onConnect() {
         String host = hostField.getText().trim();
-        String portStr = portField.getText().trim();
-
-        int port;
+        int port = 4554;
         try {
-            port = Integer.parseInt(portStr);
-        } catch (NumberFormatException ex) {
-            appendLog("CLIENT: invalid port");
+            port = Integer.parseInt(portField.getText().trim());
+        } catch (NumberFormatException e) {
+            greetingLabel.setText("Invalid port number.");
             return;
         }
-
-        appendLog("CLIENT: connecting to " + host + ":" + port + " ...");
-
-        // Connect + read greeting on a background thread so UI doesn’t freeze
-        new Thread(() -> {
-            try {
-                socket = new Socket(host, port);
-                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
-
-                String greeting = in.readLine(); // server greeting
-                appendLog("SERVER: " + greeting);
-
-                parseGreeting(greeting);
-                SwingUtilities.invokeLater(() -> {
-                    greetingLabel.setText("Greeting: " + greeting);
-                    setConnected(true);
-                });
-
-            } catch (Exception ex) {
-                appendLog("CLIENT: connect failed: " + ex.getMessage());
-                cleanup();
-                SwingUtilities.invokeLater(() -> setConnected(false));
-            }
-        }).start();
+        boolean useDummy = localTestCheckBox.isSelected();
+        boolean ok = networkClient.connect(host, port, useDummy);
+        if (!ok) {
+            return;
+        }
+        setConnected(true);
+        hostField.setEnabled(false);
+        portField.setEnabled(false);
+        localTestCheckBox.setEnabled(false);
+        greetingLabel.setText(networkClient.isUsingDummy() ? "Local test — connected." : "Connected to " + host + ":" + port);
     }
 
-    private void parseGreeting(String greeting) {
-        boardW = boardH = noteW = noteH = null;
-        validColors.clear();
+    private void onDisconnect() {
+        networkClient.disconnect();
+        setConnected(false);
+        hostField.setEnabled(true);
+        portField.setEnabled(true);
+        localTestCheckBox.setEnabled(true);
+        greetingLabel.setText("Not connected");
+    }
 
-        if (greeting == null) return;
-        String[] parts = greeting.trim().split("\\s+");
-        if (parts.length < 5) return; // must have dims + at least 1 color
+    // --- Called by BBoardClient (same contract as ClientGUI) ---
 
-        try {
-            boardW = Integer.parseInt(parts[0]);
-            boardH = Integer.parseInt(parts[1]);
-            noteW  = Integer.parseInt(parts[2]);
-            noteH  = Integer.parseInt(parts[3]);
+    /**
+     * Called by BBoardClient after handshake. Renders board dimensions and valid colors; does not parse.
+     */
+    public void initializeBoard(int boardWidth, int boardHeight, int noteWidth, int noteHeight, List<String> validColors) {
+        colorBox.removeAllItems();
+        for (String c : validColors) colorBox.addItem(c);
+        if (colorBox.getItemCount() > 0) colorBox.setSelectedIndex(0);
+        visualPanel.setBoardConfig(boardWidth, boardHeight, noteWidth, noteHeight, validColors);
+        visualPanel.setNotes(new ArrayList<>());
+    }
 
-            validColors.addAll(Arrays.asList(parts).subList(4, parts.length));
+    /**
+     * Called by BBoardClient to show the last command and response in the log.
+     */
+    public void updateStatus(String command, List<String> responseLines) {
+        logArea.append("> " + command + "\n");
+        for (String line : responseLines) logArea.append(line + "\n");
+        logArea.append("\n");
+        logArea.setCaretPosition(logArea.getDocument().getLength());
+    }
 
-            SwingUtilities.invokeLater(() -> {
-                visualPanel.setBoardConfig(boardW, boardH, noteW, noteH, validColors);
-                visualPanel.setNotes(lastNotes);
-            });
-            SwingUtilities.invokeLater(() -> {
-                colorBox.removeAllItems();
-                for (String c : validColors) colorBox.addItem(c);
-                if (colorBox.getItemCount() > 0) colorBox.setSelectedIndex(0);
-            });
+    /**
+     * Maps raw server error code to a user-friendly message and displays it.
+     */
+    public void displayError(String errorCode) {
+        String message = mapErrorToMessage(errorCode);
+        greetingLabel.setText(message);
+    }
 
-        } catch (NumberFormatException ignored) {
-            // If greeting format differs, GUI still works for manual commands
+    private static String mapErrorToMessage(String code) {
+        if (code == null) return "An error occurred.";
+        switch (code) {
+            case "OUT_OF_BOUNDS":
+                return "Coordinates are off the board!";
+            case "INVALID_FORMAT":
+                return "Invalid command format.";
+            case "COLOR_NOT_SUPPORTED":
+            case "COLOR_NOT_VALID":
+                return "That color is not supported.";
+            case "COMPLETE_OVERLAP":
+                return "A note already exists at that position.";
+            case "NO_NOTE_AT_COORDINATE":
+                return "No note at that coordinate to pin.";
+            case "PIN_NOT_FOUND":
+                return "No pin at that coordinate to remove.";
+            case "CONNECTION_TIMEOUT":
+                return "Connection timed out. Is the server running?";
+            case "CONNECTION_REFUSED":
+                return "Connection refused. Check host and port.";
+            case "CONNECTION_ERROR":
+                return "Connection error.";
+            default:
+                return "Error: " + code;
         }
     }
 
-    private void doPost() {
-        if (!isConnected()) return;
+    /**
+     * Called by BBoardClient after a state-changing OK or GET notes. Redraws the visual board.
+     */
+    public void refreshBoard(List<BBoardClient.NoteData> notes) {
+        List<VisualPanel.NoteView> views = new ArrayList<>();
+        if (notes != null) {
+            for (BBoardClient.NoteData n : notes) {
+                views.add(new VisualPanel.NoteView(n.x, n.y, n.color, n.message, n.pinned));
+            }
+        }
+        visualPanel.setNotes(views);
+    }
 
-        String x = xField.getText().trim();
-        String y = yField.getText().trim();
-        String msg = messageField.getText(); // allow spaces
+    // --- Command builders: same logic as ClientGUI, delegate to BBoardClient ---
+
+    private void doPost() {
+        if (!networkClient.isConnected()) return;
+
+        String xs = xField.getText().trim();
+        String ys = yField.getText().trim();
+        String msg = messageField.getText();
         Object colorObj = colorBox.getSelectedItem();
         String color = (colorObj == null) ? "" : colorObj.toString();
 
         if (msg == null) msg = "";
+        if (msg.trim().isEmpty()) {
+            greetingLabel.setText("Message must be at least 1 character.");
+            return;
+        }
+        if (msg.length() > 256) {
+            greetingLabel.setText("Message must be at most 256 characters.");
+            return;
+        }
+        int x, y;
+        try {
+            x = Integer.parseInt(xs);
+            y = Integer.parseInt(ys);
+        } catch (NumberFormatException e) {
+            greetingLabel.setText("x and y must be integers.");
+            return;
+        }
+        if (x < 0 || y < 0) {
+            greetingLabel.setText("Coordinates must be non-negative.");
+            return;
+        }
 
         String cmd = "POST " + x + " " + y + " " + color + " " + msg;
-        sendCommand(cmd);
-        sendCommand("GET");
+        networkClient.sendRequest(cmd);
     }
 
     private void doGet() {
-        if (!isConnected()) return;
+        if (!networkClient.isConnected()) return;
 
         List<String> parts = new ArrayList<>();
         String c = getColorFilterField.getText().trim();
@@ -285,7 +340,7 @@ public class BBoardGUI extends JFrame {
         String cy = getContainsYField.getText().trim();
         if (!cx.isEmpty() && !cy.isEmpty()) parts.add("contains=" + cx + " " + cy);
         else if (!cx.isEmpty() || !cy.isEmpty()) {
-            appendLog("CLIENT: contains requires both x and y (or leave both blank).");
+            greetingLabel.setText("contains= requires both x and y (or leave both blank).");
             return;
         }
 
@@ -294,105 +349,53 @@ public class BBoardGUI extends JFrame {
         if (ref != null && !ref.isEmpty()) parts.add("refersTo=" + ref);
 
         String cmd = parts.isEmpty() ? "GET" : "GET " + String.join(" ", parts);
-        sendCommand(cmd);
+        networkClient.setLastGetNotesCommand(cmd);
+        networkClient.sendRequest(cmd);
+    }
+
+    private void doGetPins() {
+        if (!networkClient.isConnected()) return;
+        networkClient.sendRequest("GET PINS");
     }
 
     private void doPin() {
-        if (!isConnected()) return;
-        String x = xField.getText().trim();
-        String y = yField.getText().trim();
-        sendCommand("PIN " + x + " " + y);
+        if (!networkClient.isConnected()) return;
+        String xs = pinXField.getText().trim();
+        String ys = pinYField.getText().trim();
+        int x, y;
+        try {
+            x = Integer.parseInt(xs);
+            y = Integer.parseInt(ys);
+        } catch (NumberFormatException e) {
+            greetingLabel.setText("PIN x and y must be integers.");
+            return;
+        }
+        networkClient.sendRequest("PIN " + x + " " + y);
     }
 
     private void doUnpin() {
-        if (!isConnected()) return;
-        String x = xField.getText().trim();
-        String y = yField.getText().trim();
-        sendCommand("UNPIN " + x + " " + y);
-    }
-
-    private void sendDisconnect() {
-        if (!isConnected()) return;
-        sendCommand("DISCONNECT");
-        // Server may close after OK DISCONNECTING; we also close locally.
-        new Thread(() -> {
-            try { Thread.sleep(150); } catch (InterruptedException ignored) {}
-            cleanup();
-            SwingUtilities.invokeLater(() -> setConnected(false));
-        }).start();
-    }
-
-    private void sendCommand(String cmd) {
-        if (!isConnected()) return;
-
-        appendLog("CLIENT: " + cmd);
-
-        new Thread(() -> {
-            try {
-                out.println(cmd);
-
-                // Read at least one line response
-                String first = in.readLine();
-                if (first == null) {
-                    appendLog("SERVER: <disconnected>");
-                    cleanup();
-                    SwingUtilities.invokeLater(() -> setConnected(false));
-                    return;
-                }
-                appendLog("SERVER: " + first);
-                if (cmd.startsWith("POST ") && first.equals("OK NOTE_POSTED")) {
-                    sendCommand("GET");
-                }
-
-                // If response is "OK <number>", read that many additional lines
-                // This matches your common pattern for GET/GET PINS returning counts.
-                int extra = parseOkCount(first);
-                List<String> lines = new ArrayList<>();
-                for (int i = 0; i < extra; i++) {
-                    String l = in.readLine();
-                    if (l == null) break;
-                    lines.add(l);
-                    appendLog("SERVER: " + l);
-                }
-                
-                // If this was a GET (not GET PINS), render notes
-                if (cmd.equals("GET") || cmd.startsWith("GET ")) {
-                    // ignore GET PINS
-                    if (!cmd.equals("GET PINS")) {
-                        List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
-                        lastNotes = parsed;
-                        SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
-                    }
-                }
-
-                if (first.equals("OK DISCONNECTING")) {
-                    cleanup();
-                    SwingUtilities.invokeLater(() -> setConnected(false));
-                }
-
-
-            } catch (Exception ex) {
-                appendLog("CLIENT: error: " + ex.getMessage());
-                cleanup();
-                SwingUtilities.invokeLater(() -> setConnected(false));
-            }
-        }).start();
-    }
-
-    private int parseOkCount(String line) {
-        // Accept "OK <n>" where n is integer
-        // If your server uses different formatting, this safely returns 0.
+        if (!networkClient.isConnected()) return;
+        String xs = pinXField.getText().trim();
+        String ys = pinYField.getText().trim();
+        int x, y;
         try {
-            String[] p = line.trim().split("\\s+");
-            if (p.length == 2 && p[0].equals("OK")) {
-                return Integer.parseInt(p[1]);
-            }
-        } catch (Exception ignored) {}
-        return 0;
+            x = Integer.parseInt(xs);
+            y = Integer.parseInt(ys);
+        } catch (NumberFormatException e) {
+            greetingLabel.setText("UNPIN x and y must be integers.");
+            return;
+        }
+        networkClient.sendRequest("UNPIN " + x + " " + y);
     }
 
-    private boolean isConnected() {
-        return socket != null && socket.isConnected() && !socket.isClosed() && in != null && out != null;
+    private void doShake() {
+        if (!networkClient.isConnected()) return;
+        networkClient.sendRequest("SHAKE");
+    }
+
+    private void doClear() {
+        if (!networkClient.isConnected()) return;
+        networkClient.sendRequest("CLEAR");
     }
 
     private void setConnected(boolean connected) {
@@ -411,63 +414,32 @@ public class BBoardGUI extends JFrame {
         portField.setEnabled(!connected);
     }
 
-    private void cleanup() {
-        try { if (out != null) out.close(); } catch (Exception ignored) {}
-        try { if (in != null) in.close(); } catch (Exception ignored) {}
-        try { if (socket != null) socket.close(); } catch (Exception ignored) {}
-        out = null; in = null; socket = null;
-    }
-
-    private void appendLog(String s) {
-        SwingUtilities.invokeLater(() -> {
-            logArea.append(s + "\n");
-            logArea.setCaretPosition(logArea.getDocument().getLength());
-        });
-    }
-
+    /**
+     * Launch with BBoardClient (supports server-style args for dummy).
+     * Example: java BBoardClient 4554 200 100 20 10 red white green yellow
+     */
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new BBoardGUI().setVisible(true));
-    }
-
-    private List<VisualPanel.NoteView> parseNotesFromLines(List<String> lines) {
-        List<VisualPanel.NoteView> out = new ArrayList<>();
-    
-        for (String l : lines) {
-            // Expected format from your Board.get():
-            // NOTE x y color message... PINNED=true/false
-            if (l == null) continue;
-            l = l.trim();
-            if (!l.startsWith("NOTE ")) continue;
-    
+        final BBoardClient client = new BBoardClient();
+        if (args.length >= 6) {
             try {
-                // Split first 4 tokens: NOTE x y color
-                String[] first4 = l.split("\\s+", 5);
-                if (first4.length < 5) continue;
-    
-                int x = Integer.parseInt(first4[1]);
-                int y = Integer.parseInt(first4[2]);
-                String color = first4[3];
-    
-                // remaining contains "message... PINNED=..."
-                String rest = first4[4];
-    
-                boolean pinned = false;
-                String message = rest;
-    
-                int idx = rest.lastIndexOf(" PINNED=");
-                if (idx >= 0) {
-                    message = rest.substring(0, idx);
-                    String pv = rest.substring(idx + " PINNED=".length() + 1).trim();
-                    // pv might be "true" or "false" (or include extra)
-                    pinned = pv.startsWith("true");
-                }
-    
-                out.add(new VisualPanel.NoteView(x, y, color, message, pinned));
-            } catch (Exception ignored) {
+                int port = Integer.parseInt(args[0]);
+                int boardW = Integer.parseInt(args[1]);
+                int boardH = Integer.parseInt(args[2]);
+                int noteW = Integer.parseInt(args[3]);
+                int noteH = Integer.parseInt(args[4]);
+                List<String> colors = new ArrayList<>();
+                for (int i = 5; i < args.length; i++)
+                    if (args[i] != null && !args[i].trim().isEmpty()) colors.add(args[i].trim());
+                if (colors.isEmpty()) colors.add("red");
+                client.setDummyConfig(port, boardW, boardH, noteW, noteH, colors);
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid args; use: port board_w board_h note_w note_h color1 ... (using defaults)");
             }
         }
-    
-        return out;
+        SwingUtilities.invokeLater(() -> {
+            BBoardGUI gui = new BBoardGUI(client);
+            client.setGui(gui);
+            gui.setVisible(true);
+        });
     }
-
 }
