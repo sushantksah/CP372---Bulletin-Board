@@ -1,23 +1,23 @@
+import java.awt.Color;
+import java.lang.reflect.Field;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.List; 
-
-
+import java.util.List;
 
 public class BBoard {
+
+    private static final int MAX_BOARD_DIMENSION = 10000;
+    private static final double MAX_NOTE_TO_BOARD_RATIO = 0.5;
+
     public static void main(String[] args) {
-        int port; 
+        int port;
         int boardWidth, noteWidth;
-        int boardHeight, noteHeight; 
+        int boardHeight, noteHeight;
 
-        // Hardcoding MAX values - NOT SET IN STONE / PLACEHOLDER NUMBERS FIX FIX FIX ! 
-        int MAX_NOTE_HEIGHT = 150;
-        int MAX_NOTE_WIDTH = 200; 
-
-        // Check for Improper Imports 
-        if (args.length < 6){
-            System.err.println("Sample Usage: java BBoard <port> <board_w> <board_h> <note_w> <note_h> <color1> ... <colorN>");
+        // Check for minimum required arguments
+        if (args.length < 6) {
+            System.err.println("Usage: java BBoard <port> <board_w> <board_h> <note_w> <note_h> <color1> ... <colorN>");
             System.exit(1);
             return;
         }
@@ -28,7 +28,7 @@ public class BBoard {
             boardHeight = Integer.parseInt(args[2]);
             noteWidth = Integer.parseInt(args[3]);
             noteHeight = Integer.parseInt(args[4]);
-        } catch (NumberFormatException e){
+        } catch (NumberFormatException e) {
             System.err.println("Error: port/width/height values must be integers.");
             System.exit(1);
             return;
@@ -38,45 +38,67 @@ public class BBoard {
         if (port < 1 || port > 65535) {
             System.err.println("Error: Port must be between 1 and 65535.");
             System.exit(1);
-            return; 
+            return;
         }
-        // Ensuring that board/note width/height are >0 
+
+        // Ensuring that board/note width/height are > 0
         if (boardWidth <= 0 || boardHeight <= 0 || noteWidth <= 0 || noteHeight <= 0) {
             System.err.println("Error: board_w, board_h, note_w, note_h must all be > 0.");
             System.exit(1);
             return;
         }
-        // Note can't be bigger than the board 
-        if (noteWidth > boardWidth || noteHeight > boardHeight) {
-            System.err.println("Error: note dimensions must fit inside board dimensions.");
-            System.exit(1);
-            return; 
-        }
 
-        // CHECK TO CAP THE SIZE OF THE NOTE 
-        if (noteHeight > MAX_NOTE_HEIGHT || noteWidth > MAX_NOTE_WIDTH){
-            System.err.println("Error: note exceeds max width/height!");
+        // Cap maximum board size to prevent excessive memory usage
+        if (boardWidth > MAX_BOARD_DIMENSION || boardHeight > MAX_BOARD_DIMENSION) {
+            System.err.println("Error: Board dimensions must not exceed " + MAX_BOARD_DIMENSION
+                    + ". Got " + boardWidth + "x" + boardHeight + ".");
             System.exit(1);
             return;
         }
-        
-        // Initalizing Colors 
+
+        // Ratio-based note size cap: note must not exceed MAX_NOTE_TO_BOARD_RATIO of
+        // the board
+        int maxNoteWidth = (int) (boardWidth * MAX_NOTE_TO_BOARD_RATIO);
+        int maxNoteHeight = (int) (boardHeight * MAX_NOTE_TO_BOARD_RATIO);
+        if (noteWidth > maxNoteWidth || noteHeight > maxNoteHeight) {
+            System.err.println("Error: Note dimensions exceed " + (int) (MAX_NOTE_TO_BOARD_RATIO * 100)
+                    + "% of board size. Max note size for this board: "
+                    + maxNoteWidth + "x" + maxNoteHeight
+                    + ", but got " + noteWidth + "x" + noteHeight + ".");
+            System.exit(1);
+            return;
+        }
+
+        // Validate colours against java.awt.Color using reflection
         List<String> boardColor = new ArrayList<>();
         for (int i = 5; i < args.length; i++) {
-            String c = args[i].trim();
-            if (!c.isEmpty()) boardColor.add(c);
-        }
-        if (boardColor.isEmpty()) {
-            System.err.println("Error: At least one color must be provided.");
-            System.exit(1);
+            String c = args[i].trim().toLowerCase();
+            if (c.isEmpty())
+                continue;
+
+            if (isValidSwingColor(c)) {
+                boardColor.add(c);
+            } else {
+                System.err.println("Warning: \"" + args[i].trim()
+                        + "\" is not a recognized java.awt.Color name — skipping.");
+            }
         }
 
-        // Initalizing board 
+        if (boardColor.isEmpty()) {
+            System.err.println("Error: No valid colors provided. At least one recognized colour is required.");
+            System.exit(1);
+            return;
+        }
+
+        // Initialize board
         Board board = new Board(boardWidth, boardHeight, noteWidth, noteHeight, boardColor);
 
-        // Server Socket!!!!!!!!!!!! SOCKET!!!! SOCKET !!! 
+        // Start server socket
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("BBoard server listening on port " + port);
+            System.out.println("Board: " + boardWidth + "x" + boardHeight
+                    + "  Note: " + noteWidth + "x" + noteHeight
+                    + "  Colors: " + boardColor);
 
             while (true) {
                 Socket clientSocket = serverSocket.accept();
@@ -86,10 +108,23 @@ public class BBoard {
 
         } catch (Exception e) {
             System.err.println("Fatal server error: " + e.getMessage());
-            // Line underneath is used to trace issues in the server/socket system as they occur 
-            // e.printStackTrace(); 
             System.exit(1);
         }
+    }
 
-}
+    // Checks whether a color name corresponds to a static Color field in
+    // java.awt.Color.
+    private static boolean isValidSwingColor(String colorName) {
+
+        String[] attempts = { colorName.toLowerCase(), colorName, colorName.toUpperCase() };
+        for (String attempt : attempts) {
+            try {
+                Field field = Color.class.getField(attempt);
+                if (field.getType() == Color.class)
+                    return true;
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        return false;
+    }
 }
