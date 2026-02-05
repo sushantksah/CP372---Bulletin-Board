@@ -27,11 +27,14 @@ public class RequestParser {
                 case "UNPIN": // UNPIN <x> <y>
                     return handleUnpin(splitRequest, board);
                 case "SHAKE":
+                    if (splitRequest.length != 1) return "ERROR INVALID_FORMAT";
                     return board.shake();
                 case "CLEAR":
+                    if (splitRequest.length != 1) return "ERROR INVALID_FORMAT";
                     return board.clear();
                 case "DISCONNECT":
-                    return "DISCONNECTING";
+                    if (splitRequest.length != 1) return "ERROR INVALID_FORMAT";
+                    return "OK DISCONNECTING";
                 default: // lowercase will be ignored as invalid format
                     return "ERROR INVALID_FORMAT";
             }
