@@ -55,6 +55,7 @@ public class Note {
         this.isPinned = false;
     }
 
+    // Pin cannot be on the edge of the note (as specified on Piazza)
     public boolean containsPoint(int pointX, int pointY) {
         return this.x < pointX && pointX < (this.noteWidth + this.x)
             && this.y < pointY && pointY < (noteHeight + this.y);
