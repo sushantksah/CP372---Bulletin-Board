@@ -24,22 +24,20 @@ public class Board {
 
     private boolean completelyOverlaps(int x, int y) {
         for (Note note : this.notes) {
-            if (note.containsPoint(x, y)) {
+            if (note.getX() == x && note.getY() == y) {
                 return true;
             }
         }
         return false;
     }
 
-    private boolean noteInBounds(int x, int y) {
-        // can't have notes on the very edge?
-        return x + noteWidth < this.boardWidth && y + noteHeight < this.boardHeight && x > 0 && y > 0;
-
+    private boolean noteInBounds(int x, int y) { // Note occupies (x, y) to (x+noteWidth-1, y+noteHeight-1), must be within board
+        return x >= 0 && y >= 0 && x + noteWidth <= this.boardWidth && y + noteHeight <= this.boardHeight;
     }
 
     private boolean pointInBounds(int x, int y) {
-        // can't have notes on the very edge?
-        return x < this.boardWidth && y < this.boardHeight && x > 0 && y > 0;
+       
+        return x >= 0 && y >= 0 && x < this.boardWidth && y < this.boardHeight;
     }
 
     private String buildGetResponse(List<Note> results) {
@@ -75,21 +73,20 @@ public class Board {
 
     public synchronized String addNote(int x, int y, String color, String message) {
 
-        Note note = new Note(x, y, color, message, this.noteWidth, this.noteHeight);
-
-        if (!noteInBounds(note.x, note.y)) {
+        // Validate in RFC-specified order: bounds, color, overlap
+        if (!noteInBounds(x, y)) {
             return "ERROR OUT_OF_BOUNDS";
-        } else if (completelyOverlaps(note.x, note.y)) {
+        }
+        if (!validColors.contains(color)) {
+            return "ERROR COLOR_NOT_SUPPORTED";
+        }
+        if (completelyOverlaps(x, y)) {
             return "ERROR COMPLETE_OVERLAP";
-        } else if (!validColors.contains(note.color)) {
-            // ERROR COLOR_NOT_VALID
-            return "ERROR COLOR_NOT_VALID";
-        } else {
-            this.notes.add(note);
-            // OK NOTE_POSTED
-            return "OK NOTE_POSTED";
         }
 
+        Note note = new Note(x, y, color, message, this.noteWidth, this.noteHeight);
+        this.notes.add(note);
+        return "OK NOTE_POSTED";
     }
 
     public synchronized String addPin(int pinX, int pinY) {
@@ -167,7 +164,7 @@ public class Board {
 
         if (colorFilter != null) {
             if (!validColors.contains(colorFilter)) {
-                return "ERROR COLOR_NOT_VALID";
+                return "ERROR COLOR_NOT_SUPPORTED";
             }
             results.removeIf(note -> !note.getColor().equals(colorFilter));
         }
