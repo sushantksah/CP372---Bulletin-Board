@@ -22,7 +22,7 @@ public class ClientHandler implements Runnable {
 
             String line;
             while ((line = in.readLine()) != null) {
-                line = line.stripTrailing(); 
+                line = line.strip(); 
                 if (line.isEmpty()) {
                     out.println("ERROR INVALID_FORMAT");
                     continue;
