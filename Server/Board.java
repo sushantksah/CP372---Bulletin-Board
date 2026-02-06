@@ -1,9 +1,15 @@
 package Server;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+/*
+ * Board class is the object that contains the board and the notes and pins.
+ * Manages the shared bulletin board data, including note placement, pinning logic, and validation.
+ */
 
 public class Board {
     private int boardWidth;
@@ -13,8 +19,8 @@ public class Board {
     private List<String> validColors;
     private List<Note> notes;
 
+    // Initializes the board dimensions, note size, and allowed colors
     public Board(int boardWidth, int boardHeight, int noteWidth, int noteHeight, List<String> validColors) {
-
         this.boardWidth = boardWidth;
         this.boardHeight = boardHeight;
         this.noteWidth = noteWidth;
@@ -23,6 +29,9 @@ public class Board {
         this.notes = new ArrayList<>();
     }
 
+    /* Helper methods */
+
+    // Checks if a note already exists at the exact same x and y coordinates 
     private boolean completelyOverlaps(int x, int y) {
         for (Note note : this.notes) {
             if (note.getX() == x && note.getY() == y) {
@@ -32,15 +41,17 @@ public class Board {
         return false;
     }
 
-    private boolean noteInBounds(int x, int y) { // Note occupies (x, y) to (x+noteWidth-1, y+noteHeight-1), must be within board
+    // Validates if a note of fits within the board boundaries 
+    private boolean noteInBounds(int x, int y) {
         return x >= 0 && y >= 0 && x + noteWidth <= this.boardWidth && y + noteHeight <= this.boardHeight;
     }
 
+    // Checks if a point coordinate is within the board boundaries
     private boolean pointInBounds(int x, int y) {
-       
         return x >= 0 && y >= 0 && x < this.boardWidth && y < this.boardHeight;
     }
 
+    // Builds the response for a GET command
     private String buildGetResponse(List<Note> results) {
         StringBuilder sb = new StringBuilder();
         sb.append("OK ").append(results.size());
@@ -53,12 +64,8 @@ public class Board {
         return sb.toString();
     }
 
+    // Builds the response for a GET PINS command 
     private String buildGetPinsResponse(Set<Pin> allPins) {
-
-        // OK <count>
-        // PIN x y
-        // PIN x y
-        // …
 
         StringBuilder sb = new StringBuilder();
         sb.append("OK ").append(allPins.size());
@@ -70,11 +77,10 @@ public class Board {
         return sb.toString();
     }
 
-    // Methoddssss
+    /* Public methods */
 
+    // Adds a new note to the board if validations pass
     public synchronized String addNote(int x, int y, String color, String message) {
-
-        // Validate in RFC-specified order: bounds, color, overlap
         if (!noteInBounds(x, y)) {
             return "ERROR OUT_OF_BOUNDS";
         }
@@ -90,30 +96,32 @@ public class Board {
         return "OK NOTE_POSTED";
     }
 
+    // Adds a new pin at a specific point to a note if validations pass
     public synchronized String addPin(int pinX, int pinY) {
         if (!pointInBounds(pinX, pinY))
             return "ERROR OUT_OF_BOUNDS";
-    
+
         boolean noteFound = false;
-    
+
         for (Note note : this.notes) {
             if (note.containsPoint(pinX, pinY)) {
                 noteFound = true;
-    
+
                 if (note.hasPinAt(pinX, pinY)) {
                     continue; // ignore duplicates
                 }
                 note.addPin(new Pin(pinX, pinY));
             }
         }
-    
+
         if (!noteFound) {
             return "ERROR NO_NOTE_AT_COORDINATE";
         }
-    
+
         return "OK PIN_ADDED";
     }
 
+    // Removes a pin at a specific point from a note if validations pass
     public synchronized String unPin(int pinX, int pinY) {
         if (!pointInBounds(pinX, pinY)) {
             return "ERROR OUT_OF_BOUNDS";
@@ -134,32 +142,26 @@ public class Board {
         return found ? "OK PIN_REMOVED" : "ERROR PIN_NOT_FOUND";
     }
 
+    // Removes all notes with no pins from the board
     public synchronized String shake() {
-        // List<Note> notesToRemove = new ArrayList<>();
-        // for (Note note : this.notes) {
-        // if (note.pins.isEmpty()) {
-        // notesToRemove.add(note);
-        // }
-        // }
-        // this.notes.removeAll(notesToRemove);
 
         this.notes.removeIf(note -> note.getPins().isEmpty());
-
         return "OK SHAKE_COMPLETE";
-        // any error cases here?
+
     }
 
+    // Removes all pins and all notes on the board
     public synchronized String clear() {
         for (Note note : this.notes) {
             note.clearPins();
         }
 
         this.notes.clear();
-
         return "OK CLEAR_COMPLETE";
-        // any error cases here?
+
     }
 
+    // Gets notes on the board that match the given filters, returns all notes if no filters are provided
     public synchronized String get(String colorFilter, Integer containsX, Integer containsY, String refersToSubstring) {
         List<Note> results = new ArrayList<>(this.notes);
 
@@ -178,36 +180,19 @@ public class Board {
         }
 
         if (refersToSubstring != null) {
-            // if valid string?? - should be checked here or somehwere else
-            // get message can be empty? how are we approaching empty again?
             results.removeIf(note -> !note.getMessage().contains(refersToSubstring));
         }
 
         return buildGetResponse(results);
     }
 
-    // Wrapper class for GET
+    // Helper wrapper class for GET, used by RequestParser
     public String getNotes(String color, Integer x, Integer y, String refersTo) {
         return get(color, x, y, refersTo);
     }
 
-    public String greetingLine() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(boardWidth).append(" ").append(boardHeight).append(" ")
-          .append(noteWidth).append(" ").append(noteHeight);
-        for (String c : validColors) sb.append(" ").append(c);
-        return sb.toString();
-    }
-
-    public List<String> handleCommand(String line) {
-    // RequestParser returns a multi-line String (likely)
-    String resp = RequestParser.parseAndExecute(line, this);// if your method name differs, adjust
-    return Arrays.asList(resp.split("\n", -1));
-}
-
+    // Gets all pins on the board
     public synchronized String getPins() {
-
-        // ensures no duplicates
         Set<Pin> allPins = new HashSet<>();
 
         for (Note note : this.notes) {
@@ -216,4 +201,21 @@ public class Board {
 
         return buildGetPinsResponse(allPins);
     }
+
+    // Builds the greeting line for the board for newly connected clients
+    public String greetingLine() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(boardWidth).append(" ").append(boardHeight).append(" ")
+                .append(noteWidth).append(" ").append(noteHeight);
+        for (String c : validColors)
+            sb.append(" ").append(c);
+        return sb.toString();
+    }
+
+    // Handles a command from a client, returns a list of response lines
+    public List<String> handleCommand(String line) {
+        String resp = RequestParser.parseAndExecute(line, this);
+        return Arrays.asList(resp.split("\n", -1));
+    }
+
 }
