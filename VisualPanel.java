@@ -112,7 +112,7 @@ public class VisualPanel extends JPanel {
 
             if (n.pinned) {
                 g2.setFont(getFont().deriveFont(Font.BOLD, 12f));
-                g2.drawString("📌", px + nw - 20, py + 18);
+                // g2.drawString("📌", px + nw - 20, py + 18);
             }
         }
 

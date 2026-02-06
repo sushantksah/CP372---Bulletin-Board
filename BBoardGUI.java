@@ -31,6 +31,8 @@ public class BBoardGUI extends JFrame {
     private java.util.List<VisualPanel.NoteView> lastNotes = new ArrayList<>();
     private java.util.List<int[]> lastPins = new ArrayList<>();
 
+    private volatile boolean userFilteredViewActive = false;
+
     private JLabel greetingLabel = new JLabel("Not connected");
 
     private JComboBox<String> getColorBox = new JComboBox<>();
@@ -432,7 +434,7 @@ public class BBoardGUI extends JFrame {
             }
 
             List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
-            lastNotes = parsed;
+            if (!userFilteredViewActive) lastNotes = parsed;
 
             out.println("GET PINS");
             String pinsFirst = in.readLine();
@@ -449,10 +451,11 @@ public class BBoardGUI extends JFrame {
                 lastPins = new ArrayList<>();
             }
 
+            boolean updateNotes = !userFilteredViewActive;
             List<VisualPanel.NoteView> finalNotes = parsed;
             List<int[]> finalPins = new ArrayList<>(lastPins);
             SwingUtilities.invokeLater(() -> {
-                visualPanel.setNotes(finalNotes);
+                if (updateNotes) visualPanel.setNotes(finalNotes);
                 visualPanel.setPins(finalPins);
             });
         } catch (Exception ignored) {}
@@ -492,11 +495,11 @@ public class BBoardGUI extends JFrame {
                         appendLog("SERVER: " + l);
                     }
 
-                    // If this was a GET (not GET PINS), render notes
                     if (cmd.equals("GET") || cmd.startsWith("GET ")) {
                         if (!cmd.equals("GET PINS")) {
                             List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
                             lastNotes = parsed;
+                            userFilteredViewActive = !cmd.equals("GET"); 
                             SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
                         } else {
                             lastPins = parsePinsFromLines(lines);
@@ -505,38 +508,32 @@ public class BBoardGUI extends JFrame {
                         }
                     }
 
-                    // After a state-changing success, auto-refresh the board and pins
                     if (first.equals("OK NOTE_POSTED") || first.equals("OK PIN_ADDED")
                             || first.equals("OK PIN_REMOVED") || first.equals("OK SHAKE_COMPLETE")
                             || first.equals("OK CLEAR_COMPLETE")) {
+                        userFilteredViewActive = false; // show full board after user action
                         out.println("GET");
-                        appendLog("CLIENT: GET");
                         String gFirst = in.readLine();
                         if (gFirst != null) {
-                            appendLog("SERVER: " + gFirst);
                             int gExtra = parseOkCount(gFirst);
                             List<String> gLines = new ArrayList<>();
                             for (int i = 0; i < gExtra; i++) {
                                 String l = in.readLine();
                                 if (l == null) break;
                                 gLines.add(l);
-                                appendLog("SERVER: " + l);
                             }
                             List<VisualPanel.NoteView> parsed = parseNotesFromLines(gLines);
                             lastNotes = parsed;
 
                             out.println("GET PINS");
-                            appendLog("CLIENT: GET PINS");
                             String pFirst = in.readLine();
                             if (pFirst != null) {
-                                appendLog("SERVER: " + pFirst);
                                 int pExtra = parseOkCount(pFirst);
                                 List<String> pLines = new ArrayList<>();
                                 for (int i = 0; i < pExtra; i++) {
                                     String l = in.readLine();
                                     if (l == null) break;
                                     pLines.add(l);
-                                    appendLog("SERVER: " + l);
                                 }
                                 lastPins = parsePinsFromLines(pLines);
                             } else {
