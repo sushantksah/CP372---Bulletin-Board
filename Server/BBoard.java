@@ -1,4 +1,6 @@
 package Server;
+
+// Imports 
 import java.awt.Color;
 import java.lang.reflect.Field;
 import java.net.ServerSocket;
@@ -6,8 +8,22 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
+
+/*
+ * Server Entry Point - Bulletin Board (BBoard)
+ *
+ * Responsibilities:
+ * - Validate arguments
+ * - Configure dimensions/colors (base states)
+ * - Start TCP server socket
+ * - Create new ClientHandler Threads for evry new connection
+ * 
+ * Expected Run Command: java Server.BBoard <port> <board_w> <board_h> <note_w> <note_h> <color1> ... <colorN>
+*/
+
 public class BBoard {
 
+    // Limiters for Safety (as mentioned in RFC 12 - Security Considerations)
     private static final int MAX_BOARD_DIMENSION = 10000;
     private static final double MAX_NOTE_TO_BOARD_RATIO = 0.5;
 
@@ -16,13 +32,15 @@ public class BBoard {
         int boardWidth, noteWidth;
         int boardHeight, noteHeight;
 
-        // Check for minimum required arguments
+        // Check for minimum required arguments 
         if (args.length < 6) {
+            // Exit if not met
             System.err.println("Usage: java BBoard <port> <board_w> <board_h> <note_w> <note_h> <color1> ... <colorN>");
             System.exit(1);
             return;
         }
 
+        // Server MUST validate all inputs independently of client
         try {
             port = Integer.parseInt(args[0]);
             boardWidth = Integer.parseInt(args[1]);
@@ -35,8 +53,9 @@ public class BBoard {
             return;
         }
 
-        // Port Validity Check
+        // Port Validity Check 
         if (port < 1 || port > 65535) {
+            // Error if port is 
             System.err.println("Error: Port must be between 1 and 65535.");
             System.exit(1);
             return;
@@ -51,8 +70,7 @@ public class BBoard {
 
         // Cap maximum board size to prevent excessive memory usage
         if (boardWidth > MAX_BOARD_DIMENSION || boardHeight > MAX_BOARD_DIMENSION) {
-            System.err.println("Error: Board dimensions must not exceed " + MAX_BOARD_DIMENSION
-                    + ". Got " + boardWidth + "x" + boardHeight + ".");
+            System.err.println("Error: Board dimensions must not exceed " + MAX_BOARD_DIMENSION + ". Got " + boardWidth + "x" + boardHeight + ".");
             System.exit(1);
             return;
         }
@@ -80,11 +98,11 @@ public class BBoard {
             if (isValidSwingColor(c)) {
                 boardColor.add(c);
             } else {
-                System.err.println("Warning: \"" + args[i].trim()
-                        + "\" is not a recognized java.awt.Color name — skipping.");
+                System.err.println("Warning: \"" + args[i].trim() + "\" is not a recognized java.awt.Color name — skipping.");
             }
         }
 
+        // AT LEAST one valid_color is required to pass 
         if (boardColor.isEmpty()) {
             System.err.println("Error: No valid colors provided. At least one recognized colour is required.");
             System.exit(1);

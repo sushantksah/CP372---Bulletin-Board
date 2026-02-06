@@ -1,0 +1,6 @@
+*.class
+*.log
+bin/
+out/
+build/
+*.tmp
