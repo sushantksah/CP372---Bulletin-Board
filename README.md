@@ -21,6 +21,8 @@ This project focuses on networking concepts, concurrency, and protocol design ra
 
 ## Project Structure
 ```
+BBoard = Bulletin Board **
+
 Bulletin Board Code/
 │
 ├── Server/
@@ -31,11 +33,11 @@ Bulletin Board Code/
 │   └── Pin.java             # Pin data model
 │
 ├── Client/
-│   ├── BBoardGUI.java       # Swing GUI client
-│   ├── VisualPanel.java     # Board rendering logic
-│   └── (other client classes)
+│   ├── BBoardGUI.java       # Swing GUI 
+│   ├── VisualPanel.java     # Visual board rendering 
+│   └── BBoardClient.java    # Network Client for Bulletin Board 
 │
-├── RFC-A1.docx              # Protocol specification
+├── RFC-A1.docx              # RFC/Protocol Specification 
 └── README.md
 ```
 
