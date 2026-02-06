@@ -14,6 +14,10 @@ public class BBoardGUI extends JFrame {
     private BufferedReader in;
     private PrintWriter out;
 
+    // Auto-refresh
+    private static final int REFRESH_INTERVAL_MS = 3000; // 3 seconds
+    private Timer refreshTimer;
+
     // UI fields
     private JTextField hostField = new JTextField("localhost");
     private JTextField portField = new JTextField("8080");
@@ -219,6 +223,9 @@ public class BBoardGUI extends JFrame {
                     setConnected(true);
                 });
 
+                refreshBoardFromServer();
+                startAutoRefresh();
+
             } catch (Exception ex) {
                 appendLog("CLIENT: connect failed: " + ex.getMessage());
                 cleanup();
@@ -271,7 +278,7 @@ public class BBoardGUI extends JFrame {
 
         String cmd = "POST " + x + " " + y + " " + color + " " + msg;
         sendCommand(cmd);
-        sendCommand("GET");
+        // Note: sendCommand() auto-sends GET on POST success, no need to call again
     }
 
     private void doGet() {
@@ -313,14 +320,68 @@ public class BBoardGUI extends JFrame {
 
     private void sendDisconnect() {
         if (!isConnected()) return;
+        stopAutoRefresh();
         sendCommand("DISCONNECT");
         // Server may close after OK DISCONNECTING; we also close locally.
         new Thread(() -> {
             try { Thread.sleep(150); } catch (InterruptedException ignored) {}
             cleanup();
-            SwingUtilities.invokeLater(() -> setConnected(false));
+            SwingUtilities.invokeLater(() -> {
+                setConnected(false);
+                greetingLabel.setText("Not connected");
+                lastNotes.clear();
+                visualPanel.setNotes(lastNotes);
+            });
         }).start();
     }
+
+    // ---- Auto-refresh: keeps board in sync with server (sees other clients' changes) ----
+
+    private void startAutoRefresh() {
+        stopAutoRefresh(); // safety: cancel any previous timer
+        refreshTimer = new Timer(REFRESH_INTERVAL_MS, e -> {
+            if (isConnected()) {
+                new Thread(() -> {
+                    synchronized (socketLock) {
+                        refreshBoardFromServer();
+                    }
+                }).start();
+            }
+        });
+        refreshTimer.setRepeats(true);
+        refreshTimer.start();
+    }
+
+    private void stopAutoRefresh() {
+        if (refreshTimer != null) {
+            refreshTimer.stop();
+            refreshTimer = null;
+        }
+    }
+
+    private void refreshBoardFromServer() {
+        try {
+            if (!isConnected()) return;
+            out.println("GET");
+            String first = in.readLine();
+            if (first == null) return;
+
+            int count = parseOkCount(first);
+            List<String> lines = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                String l = in.readLine();
+                if (l == null) break;
+                lines.add(l);
+            }
+
+            List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
+            lastNotes = parsed;
+            SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+        } catch (Exception ignored) {}
+    }
+
+    // Lock object for thread-safe sequential access to the socket
+    private final Object socketLock = new Object();
 
     private void sendCommand(String cmd) {
         if (!isConnected()) return;
@@ -328,53 +389,74 @@ public class BBoardGUI extends JFrame {
         appendLog("CLIENT: " + cmd);
 
         new Thread(() -> {
-            try {
-                out.println(cmd);
+            synchronized (socketLock) {
+                try {
+                    if (!isConnected()) return;
+                    out.println(cmd);
 
-                // Read at least one line response
-                String first = in.readLine();
-                if (first == null) {
-                    appendLog("SERVER: <disconnected>");
-                    cleanup();
-                    SwingUtilities.invokeLater(() -> setConnected(false));
-                    return;
-                }
-                appendLog("SERVER: " + first);
-                if (cmd.startsWith("POST ") && first.equals("OK NOTE_POSTED")) {
-                    sendCommand("GET");
-                }
-
-                // If response is "OK <number>", read that many additional lines
-                // This matches your common pattern for GET/GET PINS returning counts.
-                int extra = parseOkCount(first);
-                List<String> lines = new ArrayList<>();
-                for (int i = 0; i < extra; i++) {
-                    String l = in.readLine();
-                    if (l == null) break;
-                    lines.add(l);
-                    appendLog("SERVER: " + l);
-                }
-                
-                // If this was a GET (not GET PINS), render notes
-                if (cmd.equals("GET") || cmd.startsWith("GET ")) {
-                    // ignore GET PINS
-                    if (!cmd.equals("GET PINS")) {
-                        List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
-                        lastNotes = parsed;
-                        SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+                    // Read at least one line response
+                    String first = in.readLine();
+                    if (first == null) {
+                        appendLog("SERVER: <disconnected>");
+                        cleanup();
+                        SwingUtilities.invokeLater(() -> setConnected(false));
+                        return;
                     }
-                }
+                    appendLog("SERVER: " + first);
 
-                if (first.equals("OK DISCONNECTING")) {
+                    // If response is "OK <number>", read that many additional lines
+                    int extra = parseOkCount(first);
+                    List<String> lines = new ArrayList<>();
+                    for (int i = 0; i < extra; i++) {
+                        String l = in.readLine();
+                        if (l == null) break;
+                        lines.add(l);
+                        appendLog("SERVER: " + l);
+                    }
+
+                    // If this was a GET (not GET PINS), render notes
+                    if (cmd.equals("GET") || cmd.startsWith("GET ")) {
+                        if (!cmd.equals("GET PINS")) {
+                            List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
+                            lastNotes = parsed;
+                            SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+                        }
+                    }
+
+                    // After a state-changing success, auto-refresh the board
+                    if (first.equals("OK NOTE_POSTED") || first.equals("OK PIN_ADDED")
+                            || first.equals("OK PIN_REMOVED") || first.equals("OK SHAKE_COMPLETE")
+                            || first.equals("OK CLEAR_COMPLETE")) {
+                        // Send GET inline (already holding lock)
+                        out.println("GET");
+                        appendLog("CLIENT: GET");
+                        String gFirst = in.readLine();
+                        if (gFirst != null) {
+                            appendLog("SERVER: " + gFirst);
+                            int gExtra = parseOkCount(gFirst);
+                            List<String> gLines = new ArrayList<>();
+                            for (int i = 0; i < gExtra; i++) {
+                                String l = in.readLine();
+                                if (l == null) break;
+                                gLines.add(l);
+                                appendLog("SERVER: " + l);
+                            }
+                            List<VisualPanel.NoteView> parsed = parseNotesFromLines(gLines);
+                            lastNotes = parsed;
+                            SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+                        }
+                    }
+
+                    if (first.equals("OK DISCONNECTING")) {
+                        cleanup();
+                        SwingUtilities.invokeLater(() -> setConnected(false));
+                    }
+
+                } catch (Exception ex) {
+                    appendLog("CLIENT: error: " + ex.getMessage());
                     cleanup();
                     SwingUtilities.invokeLater(() -> setConnected(false));
                 }
-
-
-            } catch (Exception ex) {
-                appendLog("CLIENT: error: " + ex.getMessage());
-                cleanup();
-                SwingUtilities.invokeLater(() -> setConnected(false));
             }
         }).start();
     }
@@ -412,6 +494,7 @@ public class BBoardGUI extends JFrame {
     }
 
     private void cleanup() {
+        stopAutoRefresh();
         try { if (out != null) out.close(); } catch (Exception ignored) {}
         try { if (in != null) in.close(); } catch (Exception ignored) {}
         try { if (socket != null) socket.close(); } catch (Exception ignored) {}
@@ -457,8 +540,7 @@ public class BBoardGUI extends JFrame {
                 int idx = rest.lastIndexOf(" PINNED=");
                 if (idx >= 0) {
                     message = rest.substring(0, idx);
-                    String pv = rest.substring(idx + " PINNED=".length() + 1).trim();
-                    // pv might be "true" or "false" (or include extra)
+                    String pv = rest.substring(idx + " PINNED=".length()).trim();
                     pinned = pv.startsWith("true");
                 }
     
