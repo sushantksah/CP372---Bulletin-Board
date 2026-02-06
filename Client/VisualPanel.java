@@ -154,6 +154,29 @@ public class VisualPanel extends JPanel {
     }
 
     private Color mapColorName(String name) {
+        if (name == null) return Color.YELLOW; // Default fallback
+        String n = name.trim().toLowerCase();
+    
+        try {
+            // Attempt to find the color in java.awt.Color using reflection
+            // This makes the Client logic identical to the Server logic
+            java.lang.reflect.Field field = Color.class.getField(n);
+            if (field.getType() == Color.class) {
+                return (Color) field.get(null);
+            }
+        } catch (Exception e) {
+            // If reflection fails, check for a few standard variations
+            try {
+                return (Color) Color.class.getField(n.toUpperCase()).get(null);
+            } catch (Exception e2) {
+                // Final fallback if the string is truly unrecognized
+                return Color.LIGHT_GRAY;
+            }
+        }
+        return Color.LIGHT_GRAY;
+    }
+    
+    /*private Color mapColorName(String name) {
         if (name == null) return new Color(255, 241, 118); // soft yellow
         String n = name.trim().toLowerCase();
 
@@ -176,5 +199,5 @@ public class VisualPanel extends JPanel {
         int g = 120 + ((h / 3) % 110);
         int b = 120 + ((h / 7) % 110);
         return new Color(r, g, b);
-    }
+    }*/
 }
