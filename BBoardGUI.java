@@ -29,6 +29,7 @@ public class BBoardGUI extends JFrame {
     private JButton disconnectBtn = new JButton("Disconnect");
     private VisualPanel visualPanel = new VisualPanel();
     private java.util.List<VisualPanel.NoteView> lastNotes = new ArrayList<>();
+    private java.util.List<int[]> lastPins = new ArrayList<>();
 
     private JLabel greetingLabel = new JLabel("Not connected");
 
@@ -49,6 +50,9 @@ public class BBoardGUI extends JFrame {
     private JTextField getContainsXField = new JTextField("");        // optional: contains x
     private JTextField getContainsYField = new JTextField("");        // optional: contains y
     private JTextField getRefersToField = new JTextField("");         // optional: refersTo text
+
+    private JTextField pinXField = new JTextField("0", 4);
+    private JTextField pinYField = new JTextField("0", 4);
 
     private JTextArea logArea = new JTextArea(18, 60);
 
@@ -120,6 +124,10 @@ public class BBoardGUI extends JFrame {
         commands.add(buildGetPanel());
 
         JPanel quick = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        quick.add(new JLabel("PIN/UNPIN x:"));
+        quick.add(pinXField);
+        quick.add(new JLabel("y:"));
+        quick.add(pinYField);
         quick.add(pinBtn);
         quick.add(unpinBtn);
         quick.add(getPinsBtn);
@@ -319,16 +327,36 @@ public class BBoardGUI extends JFrame {
 
     private void doPin() {
         if (!isConnected()) return;
-        String x = xField.getText().trim();
-        String y = yField.getText().trim();
-        sendCommand("PIN " + x + " " + y);
+        String xs = pinXField.getText().trim();
+        String ys = pinYField.getText().trim();
+        if (xs.isEmpty() || ys.isEmpty()) {
+            appendLog("CLIENT: enter x and y for PIN.");
+            return;
+        }
+        try {
+            int x = Integer.parseInt(xs);
+            int y = Integer.parseInt(ys);
+            sendCommand("PIN " + x + " " + y);
+        } catch (NumberFormatException e) {
+            appendLog("CLIENT: x and y must be integers for PIN.");
+        }
     }
 
     private void doUnpin() {
         if (!isConnected()) return;
-        String x = xField.getText().trim();
-        String y = yField.getText().trim();
-        sendCommand("UNPIN " + x + " " + y);
+        String xs = pinXField.getText().trim();
+        String ys = pinYField.getText().trim();
+        if (xs.isEmpty() || ys.isEmpty()) {
+            appendLog("CLIENT: enter x and y for UNPIN.");
+            return;
+        }
+        try {
+            int x = Integer.parseInt(xs);
+            int y = Integer.parseInt(ys);
+            sendCommand("UNPIN " + x + " " + y);
+        } catch (NumberFormatException e) {
+            appendLog("CLIENT: x and y must be integers for UNPIN.");
+        }
     }
 
     private void sendDisconnect() {
@@ -343,7 +371,9 @@ public class BBoardGUI extends JFrame {
                 setConnected(false);
                 greetingLabel.setText("Not connected");
                 lastNotes.clear();
+                lastPins.clear();
                 visualPanel.setNotes(lastNotes);
+                visualPanel.setPins(lastPins);
             });
         }).start();
     }
@@ -389,7 +419,28 @@ public class BBoardGUI extends JFrame {
 
             List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
             lastNotes = parsed;
-            SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+
+            out.println("GET PINS");
+            String pinsFirst = in.readLine();
+            if (pinsFirst != null) {
+                int pinsCount = parseOkCount(pinsFirst);
+                List<String> pinsLines = new ArrayList<>();
+                for (int i = 0; i < pinsCount; i++) {
+                    String l = in.readLine();
+                    if (l == null) break;
+                    pinsLines.add(l);
+                }
+                lastPins = parsePinsFromLines(pinsLines);
+            } else {
+                lastPins = new ArrayList<>();
+            }
+
+            List<VisualPanel.NoteView> finalNotes = parsed;
+            List<int[]> finalPins = new ArrayList<>(lastPins);
+            SwingUtilities.invokeLater(() -> {
+                visualPanel.setNotes(finalNotes);
+                visualPanel.setPins(finalPins);
+            });
         } catch (Exception ignored) {}
     }
 
@@ -433,14 +484,17 @@ public class BBoardGUI extends JFrame {
                             List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
                             lastNotes = parsed;
                             SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+                        } else {
+                            lastPins = parsePinsFromLines(lines);
+                            List<int[]> fp = new ArrayList<>(lastPins);
+                            SwingUtilities.invokeLater(() -> visualPanel.setPins(fp));
                         }
                     }
 
-                    // After a state-changing success, auto-refresh the board
+                    // After a state-changing success, auto-refresh the board and pins
                     if (first.equals("OK NOTE_POSTED") || first.equals("OK PIN_ADDED")
                             || first.equals("OK PIN_REMOVED") || first.equals("OK SHAKE_COMPLETE")
                             || first.equals("OK CLEAR_COMPLETE")) {
-                        // Send GET inline (already holding lock)
                         out.println("GET");
                         appendLog("CLIENT: GET");
                         String gFirst = in.readLine();
@@ -456,7 +510,31 @@ public class BBoardGUI extends JFrame {
                             }
                             List<VisualPanel.NoteView> parsed = parseNotesFromLines(gLines);
                             lastNotes = parsed;
-                            SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+
+                            out.println("GET PINS");
+                            appendLog("CLIENT: GET PINS");
+                            String pFirst = in.readLine();
+                            if (pFirst != null) {
+                                appendLog("SERVER: " + pFirst);
+                                int pExtra = parseOkCount(pFirst);
+                                List<String> pLines = new ArrayList<>();
+                                for (int i = 0; i < pExtra; i++) {
+                                    String l = in.readLine();
+                                    if (l == null) break;
+                                    pLines.add(l);
+                                    appendLog("SERVER: " + l);
+                                }
+                                lastPins = parsePinsFromLines(pLines);
+                            } else {
+                                lastPins = new ArrayList<>();
+                            }
+
+                            List<VisualPanel.NoteView> fn = parsed;
+                            List<int[]> fp = new ArrayList<>(lastPins);
+                            SwingUtilities.invokeLater(() -> {
+                                visualPanel.setNotes(fn);
+                                visualPanel.setPins(fp);
+                            });
                         }
                     }
 
@@ -562,6 +640,25 @@ public class BBoardGUI extends JFrame {
             }
         }
     
+        return out;
+    }
+
+    /** Parse GET PINS data lines ("PIN x y") into list of [x,y]. */
+    private List<int[]> parsePinsFromLines(List<String> lines) {
+        List<int[]> out = new ArrayList<>();
+        for (String l : lines) {
+            if (l == null) continue;
+            l = l.trim();
+            if (!l.startsWith("PIN ")) continue;
+            try {
+                String[] parts = l.split("\\s+");
+                if (parts.length >= 3) {
+                    int x = Integer.parseInt(parts[1]);
+                    int y = Integer.parseInt(parts[2]);
+                    out.add(new int[] { x, y });
+                }
+            } catch (NumberFormatException ignored) {}
+        }
         return out;
     }
 

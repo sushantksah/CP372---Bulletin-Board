@@ -23,6 +23,10 @@ public class VisualPanel extends JPanel {
     private int boardW = 0, boardH = 0, noteW = 1, noteH = 1;
     private List<String> validColors = new ArrayList<>();
     private List<NoteView> notes = new ArrayList<>();
+    private List<int[]> pins = new ArrayList<>();
+
+    /** Pin circle radius in pixels (drawn at board coordinates). */
+    private static final int PIN_CIRCLE_RADIUS = 5;
 
     public VisualPanel() {
         setPreferredSize(new Dimension(520, 520));
@@ -40,6 +44,11 @@ public class VisualPanel extends JPanel {
 
     public void setNotes(List<NoteView> notes) {
         this.notes = new ArrayList<>(notes);
+        repaint();
+    }
+
+    public void setPins(List<int[]> pins) {
+        this.pins = new ArrayList<>(pins);
         repaint();
     }
 
@@ -105,6 +114,15 @@ public class VisualPanel extends JPanel {
                 g2.setFont(getFont().deriveFont(Font.BOLD, 12f));
                 g2.drawString("📌", px + nw - 20, py + 18);
             }
+        }
+
+        // Pins: black circles at each pin (x,y) in board coordinates
+        int pinR = Math.min(PIN_CIRCLE_RADIUS, Math.max(2, cell / 3));
+        g2.setColor(Color.BLACK);
+        for (int[] pin : pins) {
+            int px = startX + pin[0] * cell + cell / 2;
+            int py = startY + pin[1] * cell + cell / 2;
+            g2.fillOval(px - pinR, py - pinR, pinR * 2, pinR * 2);
         }
 
         // Border around board
