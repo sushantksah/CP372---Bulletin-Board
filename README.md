@@ -99,4 +99,4 @@ java Client.BBoardGUI
 
 ## Authors
 Sushant Sah  
-Jessica Tidd
+Jessica Tidd (@jesssyd)
