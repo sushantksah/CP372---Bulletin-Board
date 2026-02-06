@@ -498,9 +498,11 @@ public class BBoardGUI extends JFrame {
                     if (cmd.equals("GET") || cmd.startsWith("GET ")) {
                         if (!cmd.equals("GET PINS")) {
                             List<VisualPanel.NoteView> parsed = parseNotesFromLines(lines);
-                            lastNotes = parsed;
-                            userFilteredViewActive = !cmd.equals("GET"); 
-                            SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+                            if (cmd.equals("GET")) {
+                                lastNotes = parsed;
+                                userFilteredViewActive = false;
+                                SwingUtilities.invokeLater(() -> visualPanel.setNotes(parsed));
+                            }
                         } else {
                             lastPins = parsePinsFromLines(lines);
                             List<int[]> fp = new ArrayList<>(lastPins);
