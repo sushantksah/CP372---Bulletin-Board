@@ -33,9 +33,10 @@ public class BBoardGUI extends JFrame {
 
     private JLabel greetingLabel = new JLabel("Not connected");
 
-    private JComboBox<String> colorBox = new JComboBox<>();
-    private JTextField xField = new JTextField("0");
-    private JTextField yField = new JTextField("0");
+    private JComboBox<String> getColorBox = new JComboBox<>();
+    private JComboBox<String> postColorBox = new JComboBox<>();
+    private JTextField xField = new JTextField("0", 4);
+    private JTextField yField = new JTextField("0", 4);
     private JTextField messageField = new JTextField("");
 
     private JButton postBtn = new JButton("POST");
@@ -46,10 +47,9 @@ public class BBoardGUI extends JFrame {
     private JButton shakeBtn = new JButton("SHAKE");
     private JButton clearBtn = new JButton("CLEAR");
 
-    private JTextField getColorFilterField = new JTextField("");      // optional: color filter
-    private JTextField getContainsXField = new JTextField("");        // optional: contains x
-    private JTextField getContainsYField = new JTextField("");        // optional: contains y
-    private JTextField getRefersToField = new JTextField("");         // optional: refersTo text
+    private JTextField getContainsXField = new JTextField("", 4);        // optional: contains x
+    private JTextField getContainsYField = new JTextField("", 4);        // optional: contains y
+    private JTextField getRefersToField = new JTextField("", 6);         // optional: refersTo text
 
     private JTextField pinXField = new JTextField("0", 4);
     private JTextField pinYField = new JTextField("0", 4);
@@ -154,7 +154,7 @@ public class BBoardGUI extends JFrame {
         c.gridx = 1; c.gridy = 1; p.add(yField, c);
 
         c.gridx = 0; c.gridy = 2; p.add(new JLabel("color:"), c);
-        c.gridx = 1; c.gridy = 2; p.add(colorBox, c);
+        c.gridx = 1; c.gridy = 2; p.add(postColorBox, c);
 
         c.gridx = 0; c.gridy = 3; p.add(new JLabel("message:"), c);
         c.gridx = 1; c.gridy = 3; p.add(messageField, c);
@@ -173,7 +173,7 @@ public class BBoardGUI extends JFrame {
         c.fill = GridBagConstraints.HORIZONTAL;
 
         c.gridx = 0; c.gridy = 0; p.add(new JLabel("color=<c>"), c);
-        c.gridx = 1; c.gridy = 0; p.add(getColorFilterField, c);
+        c.gridx = 1; c.gridy = 0; p.add(getColorBox, c);
 
         c.gridx = 0; c.gridy = 1; p.add(new JLabel("contains=<x> <y>"), c);
         JPanel containsPanel = new JPanel(new GridLayout(1, 2, 6, 0));
@@ -276,9 +276,20 @@ public class BBoardGUI extends JFrame {
                 visualPanel.setNotes(lastNotes);
             });
             SwingUtilities.invokeLater(() -> {
-                colorBox.removeAllItems();
-                for (String c : validColors) colorBox.addItem(c);
-                if (colorBox.getItemCount() > 0) colorBox.setSelectedIndex(0);
+                postColorBox.removeAllItems();
+                getColorBox.removeAllItems();
+            
+                for (String col : validColors) {
+                    postColorBox.addItem(col);
+                }
+            
+                getColorBox.addItem(""); // maintaining option to choose filters
+                for (String col : validColors) {
+                    getColorBox.addItem(col);
+                }
+            
+                if (postColorBox.getItemCount() > 0) postColorBox.setSelectedIndex(0);
+                getColorBox.setSelectedIndex(0); // selects blank option
             });
 
         } catch (NumberFormatException ignored) {
@@ -292,7 +303,7 @@ public class BBoardGUI extends JFrame {
         String x = xField.getText().trim();
         String y = yField.getText().trim();
         String msg = messageField.getText(); // allow spaces
-        Object colorObj = colorBox.getSelectedItem();
+        Object colorObj = postColorBox.getSelectedItem();
         String color = (colorObj == null) ? "" : colorObj.toString();
 
         if (msg == null) msg = "";
@@ -306,8 +317,11 @@ public class BBoardGUI extends JFrame {
         if (!isConnected()) return;
 
         List<String> parts = new ArrayList<>();
-        String c = getColorFilterField.getText().trim();
-        if (!c.isEmpty()) parts.add("color=" + c);
+        Object cObj = getColorBox.getSelectedItem();
+        if (cObj != null) {
+            String c = cObj.toString().trim();
+            if (!c.isEmpty()) parts.add("color=" + c);
+        }
 
         String cx = getContainsXField.getText().trim();
         String cy = getContainsYField.getText().trim();
