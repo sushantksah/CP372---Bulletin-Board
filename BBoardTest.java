@@ -23,7 +23,7 @@ public class BBoardTest {
     private Socket socket;
 
     public static void main(String[] args) throws Exception {
-        int port = 9999;
+        int port = 4554;
         if (args.length > 0) port = Integer.parseInt(args[0]);
 
         System.out.println("========================================");
@@ -393,7 +393,7 @@ public class BBoardTest {
     }
 
     private void testPinNoNote() throws Exception {
-        String resp = send("PIN 199 99");
+        String resp = send("PIN 199 0");
         checkStartsWith("PIN no note at coordinate", resp, "ERROR NO_NOTE_AT_COORDINATE");
     }
 
