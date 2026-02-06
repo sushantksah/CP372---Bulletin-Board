@@ -1,5 +1,6 @@
 import java.awt.*;
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -13,6 +14,9 @@ public class BBoardGUI extends JFrame {
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
+
+    // Connection timeout so we don't hang if server is unreachable (firewall, network isolation)
+    private static final int CONNECT_TIMEOUT_MS = 10_000; // 10 seconds
 
     // Auto-refresh
     private static final int REFRESH_INTERVAL_MS = 3000; // 3 seconds
@@ -210,7 +214,8 @@ public class BBoardGUI extends JFrame {
         // Connect + read greeting on a background thread so UI doesn’t freeze
         new Thread(() -> {
             try {
-                socket = new Socket(host, port);
+                socket = new Socket();
+                socket.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MS);
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
 
@@ -226,6 +231,14 @@ public class BBoardGUI extends JFrame {
                 refreshBoardFromServer();
                 startAutoRefresh();
 
+            } catch (java.net.SocketTimeoutException ex) {
+                appendLog("CLIENT: connection timed out (check server IP, port, firewall, or use same machine).");
+                cleanup();
+                SwingUtilities.invokeLater(() -> setConnected(false));
+            } catch (java.net.ConnectException ex) {
+                appendLog("CLIENT: connection refused — is the server running on " + host + ":" + port + "?");
+                cleanup();
+                SwingUtilities.invokeLater(() -> setConnected(false));
             } catch (Exception ex) {
                 appendLog("CLIENT: connect failed: " + ex.getMessage());
                 cleanup();

@@ -1,4 +1,5 @@
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,7 +79,9 @@ public class BBoardClient {
         }
 
         try {
-            socket = new Socket(host, port);
+            int connectTimeoutMs = 10_000; // 10 seconds — avoid hanging on unreachable host
+            socket = new Socket();
+            socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
 
