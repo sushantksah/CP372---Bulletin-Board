@@ -9,6 +9,7 @@ import java.util.List;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
+
 public class BBoardGUI extends JFrame {
 
     // Network
