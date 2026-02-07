@@ -23,13 +23,14 @@ public class GUI extends JFrame {
     // Visual display
     private VisualPanel visualPanel = new VisualPanel();
 
-    // POST panel components
+    // POST components
     private JTextField xField = new JTextField("0", 4);
     private JTextField yField = new JTextField("0", 4);
     private JComboBox<String> postColorBox = new JComboBox<>();
     private JTextField messageField = new JTextField("");
     private JButton postBtn = new JButton("POST");
 
+    // GET components
     private JComboBox<String> getColorBox = new JComboBox<>();
     private JTextField getContainsXField = new JTextField("", 4);
     private JTextField getContainsYField = new JTextField("", 4);
@@ -37,23 +38,30 @@ public class GUI extends JFrame {
     private JButton getBtn = new JButton("GET");
     private JButton getPinsBtn = new JButton("GET PINS");
 
+    // PIN/UNPIN components
     private JTextField pinXField = new JTextField("0", 4);
     private JTextField pinYField = new JTextField("0", 4);
     private JButton pinBtn = new JButton("PIN");
     private JButton unpinBtn = new JButton("UNPIN");
 
+    // SHAKE/CLEAR components
     private JButton shakeBtn = new JButton("SHAKE");
     private JButton clearBtn = new JButton("CLEAR");
 
+    // Log area
     private JTextArea logArea = new JTextArea(18, 60);
 
-    private Integer boardW, boardH, noteW, noteH;
-    private List<String> validColors = new ArrayList<>();
+    // Board configuration
+    // private Integer boardW, boardH, noteW, noteH;
+    // private List<String> validColors = new ArrayList<>();
 
+    // Prevents logging refresh commands
+    private volatile boolean suppressLogging = false; 
+
+    // Constructor
     public GUI() {
         super("Bulletin Board Client");
 
-        // Initialize client and set up callback
         client = new BBoardClient();
         client.setGui(new GuiCallbackImpl());
 
@@ -264,7 +272,6 @@ public class GUI extends JFrame {
 
         appendLog("CLIENT: connecting to " + host + ":" + port + " ...");
 
-        // Connect and read greating ** biggest change
         new Thread(() -> {
             boolean success = client.connect(host, port);
             SwingUtilities.invokeLater(() -> {
@@ -280,6 +287,7 @@ public class GUI extends JFrame {
         }).start();
     }
 
+    // Disconnect from the server
     private void disconnect() {
         if (!client.isConnected())
             return;
@@ -287,7 +295,6 @@ public class GUI extends JFrame {
         stopAutoRefresh();
         appendLog("CLIENT: Disconnecting...");
 
-        // ANOTHER CHANGE***
         new Thread(() -> {
             client.disconnect();
             SwingUtilities.invokeLater(() -> {
@@ -301,7 +308,6 @@ public class GUI extends JFrame {
     }
 
     /* Command methods */
-
     // Send a POST command with user input
     private void doPost() {
         if (!client.isConnected())
@@ -316,34 +322,15 @@ public class GUI extends JFrame {
         if (msg == null)
             msg = "";
 
-        // Client-side validation *** server validates anyway
-        // if (x.isEmpty() || y.isEmpty()) {
-        //     appendLog("CLIENT: x and y coordinates required");
-        //     return;
-        // }
-
-        // if (color.isEmpty()) {
-        //     appendLog("CLIENT: Color must be selected");
-        //     return;
-        // }
-
-        // if (msg.trim().isEmpty()) {
-        //     appendLog("CLIENT: Message cannot be empty");
-        //     return;
-        // }
-
-        // if (msg.length() > 256) {
-        //     appendLog("CLIENT: Message too long (max 256 characters)");
-        //     return;
-        // }
-
         String cmd = "POST " + x + " " + y + " " + color + " " + msg;
         sendCommand(cmd);
     }
 
+    // Send a GET command
     private void doGet() {
         if (!client.isConnected())
             return;
+
         List<String> parts = new ArrayList<>();
 
         // Get color filter
@@ -399,6 +386,7 @@ public class GUI extends JFrame {
         }
     }
 
+    // Unpin a note
     private void doUnpin() {
         if (!client.isConnected())
             return;
@@ -420,6 +408,7 @@ public class GUI extends JFrame {
         }
     }
 
+    // Send a command to the server
     private void sendCommand(String cmd) {
         if (!client.isConnected())
             return;
@@ -434,11 +423,13 @@ public class GUI extends JFrame {
     /* Auto refresh methods */
     // Start auto refresh timer
     private void startAutoRefresh() {
-        stopAutoRefresh(); // cancel any previous timer
+        stopAutoRefresh(); 
         refreshTimer = new Timer(REFRESH_INTERVAL_MS, e -> {
             if (client.isConnected()) {
                 new Thread(() -> {
+                    suppressLogging = true;  
                     client.sendRequest("GET");
+                    suppressLogging = false;
                 }).start();
             }
         });
@@ -455,8 +446,7 @@ public class GUI extends JFrame {
     }
 
     /* UI state management */
-
-    // Set the connected state of the client
+    // Set the connected state
     private void setConnected(boolean connected) {
         connectBtn.setEnabled(!connected);
         disconnectBtn.setEnabled(connected);
@@ -473,7 +463,7 @@ public class GUI extends JFrame {
         portField.setEnabled(!connected);
     }
 
-    // Append a message to the log area
+    // Add message to the log
     private void appendLog(String s) {
         SwingUtilities.invokeLater(() -> {
             logArea.append(s + "\n");
@@ -482,25 +472,21 @@ public class GUI extends JFrame {
     }
 
     /* Callback */
-
-    // ** big change
+    // Callback
     private class GuiCallbackImpl implements BBoardClient.GuiCallback {
 
         @Override
         public void initializeBoard(int boardWidth, int boardHeight, int noteWidth,
                 int noteHeight, List<String> colors) {
             SwingUtilities.invokeLater(() -> {
-                // Store board configuration
-                boardW = boardWidth;
-                boardH = boardHeight;
-                noteW = noteWidth;
-                noteH = noteHeight;
-                validColors = new ArrayList<>(colors);
+        
+                // boardW = boardWidth;
+                // boardH = boardHeight;
+                // noteW = noteWidth;
+                // noteH = noteHeight;
+                // validColors = new ArrayList<>(colors);
 
-                // Configure visual panel
                 visualPanel.setBoardConfig(boardWidth, boardHeight, noteWidth, noteHeight, colors);
-
-                // Populate color dropdowns
                 postColorBox.removeAllItems();
                 getColorBox.removeAllItems();
 
@@ -525,12 +511,13 @@ public class GUI extends JFrame {
                 appendLog("CLIENT: Board initialized - " + boardWidth + "x" + boardHeight);
             });
         }
-
+        // Log all response lines
         @Override
         public void updateStatus(String command, List<String> responseLines) {
-            SwingUtilities.invokeLater(() -> {
-                // Log all response lines
+            if (suppressLogging) return;
+            SwingUtilities.invokeLater(() -> {   
                 for (String line : responseLines) {
+                    
                     appendLog("SERVER: " + line);
                 }
             });
@@ -554,10 +541,10 @@ public class GUI extends JFrame {
             });
         }
 
+        // Refresh the board
         @Override
         public void refreshBoard(List<BBoardClient.NoteData> notes) {
             SwingUtilities.invokeLater(() -> {
-                // Convert BBoardClient.NoteData to VisualPanel.NoteView
                 List<VisualPanel.NoteView> views = new ArrayList<>();
                 for (BBoardClient.NoteData note : notes) {
                     views.add(new VisualPanel.NoteView(
@@ -566,11 +553,11 @@ public class GUI extends JFrame {
 
                 // Update
                 visualPanel.setNotes(views);
-
             });
         }
     }
 
+    // Main method
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             GUI gui = new GUI();
